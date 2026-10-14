@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
 
 static void openre4_log_callback(AuroraLogLevel level, const char* module, const char* message, unsigned int len) {
     const char* levelStr = "INFO";
@@ -78,9 +79,20 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        // Limpa a tela com o tom escuro atmosférico do RE4
-        GXColor re4DarkBg = { 10, 10, 15, 255 };
-        GXSetCopyClear(re4DarkBg, GX_MAX_Z24);
+        static float timer = 0.0f;
+        static uint32_t frameCount = 0;
+        timer += 0.03f;
+        frameCount++;
+
+        if (frameCount % 60 == 0) {
+            printf("[OpenRE4 Core] Rodando a 60 FPS nativo! Frame: %u\n", frameCount);
+            fflush(stdout);
+        }
+
+        // Vermelho "Biohazard / Resident Evil" pulsando suavemente para dar feedback visual claro
+        uint8_t redIntensity = (uint8_t)((sinf(timer) * 0.5f + 0.5f) * 150.0f + 50.0f);
+        GXColor re4PulsingRed = { redIntensity, 15, 20, 255 };
+        GXSetCopyClear(re4PulsingRed, GX_MAX_Z24);
 
         aurora_end_frame();
     }
