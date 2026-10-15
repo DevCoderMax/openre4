@@ -1,97 +1,119 @@
-# Resident Evil 4 (GameCube) decompilation
+# openre4 — Resident Evil 4 (GameCube) rodando nativo no PC
 
-This is a complete decompilation of the GameCube debug build of Resident Evil 4, `G4BE08`, the
-"Nov 25 2004" prototype on two discs. The debug build shipped with `Bio4.sym` symbol files that name
-every function, and that is what made a full decompilation possible.
+Porte nativo de **Resident Evil 4** (build de depuração `G4BE08` do GameCube, "Nov 25 2004") para PC moderno, a partir da descompilação completa em C/C++ — **sem emulador**. O objetivo final é um executável multiplataforma com **multiplayer cooperativo** via servidor dedicado.
 
-Building the repository gives back the exact original files: `main.dol` and all 114 REL overlays,
-checked against `config/G4BE08/build.sha1` on every build. The source is about 570,000 lines of C and
-C++ in `src/` and 44,000 lines of headers in `include/`, with no assembly files.
+> Base de descompilação: [adonis-singh/re4](https://github.com/adonis-singh/re4) (mantido como `upstream`).
+> Camada nativa (janela, vídeo, input, DVD): [Aurora](https://github.com/encounter/aurora) via `vendor/aurora` (SDL3 + Vulkan/Dawn).
 
-The code is built with the compilers the original was built with:
+---
 
-| Code | Compiler |
-|---|---|
-| The game | SN Systems ProDG 3.9.3, GCC 2.95.3 "SN BUILD v1.79", built from SN's GPL source release |
-| CRI middleware (`adx_*`, `sfd_*`, `mpv_*` and the rest in `src/lib/`) | Metrowerks CodeWarrior 2.4.7, which CRI shipped the libraries with |
-| Nintendo SDK (`OS*`, `GX*` and the rest in `src/lib/`) | Metrowerks CodeWarrior GC/1.2.5n, sources from [dolsdk2004](https://github.com/doldecomp/dolsdk2004) |
+## Status atual (out/2026 — verificado no repo)
 
-There are no game assets in this repository. To build it you need your own images of the debug
-discs. Disc 1 has `main.dol` and most of the RELs, disc 2 has the four RELs for the island stages.
+| Frente | Estado |
+| :--- | :--- |
+| Build nativo Linux x86_64 (`build/openre4`, ~33 MB) | ✅ Compila limpo (`ninja -C build`) |
+| Janela SDL3 + backend Vulkan (Intel Iris Xe / Mesa) | ✅ Abre, 60 FPS, fecha/redimensiona |
+| Montagem do disco original (`G4BE08`) | ✅ `GameID: G4BE` via Aurora DVD |
+| Inicialização (`systemStartInit`, `Title_task`) | ✅ Roda |
+| Sala da Vila `r100` (`--village`) | 🔄 Carregando — `gameRoomInit: Camera completed`, `st1/r100_*.dat` lidos; geometria ainda não renderizada |
+| Teclado/gamepad PC | ✅ Mapeado (tabela abaixo) |
+| Servidor multiplayer em Rust | ❌ Não iniciado (planejado) |
+| Modo Mercenaries co-op | ❌ Não iniciado (planejado) |
+| Windows / macOS / Switch / Android | ❌ Não iniciado (planejado) |
 
-## Building
+Detalhes da arquitetura e das 5 fases: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-You need Linux, Python 3 and [ninja](https://ninja-build.org/). The first configure run downloads
-decomp-toolkit, objdiff, wibo and the CodeWarrior compilers. The SN GCC is built once from SN's
-source:
+---
 
-```sh
-# 1. build the SN compiler once (needs SN's GPL source release, see tools/sn-gcc/build.sh)
-SN_GCC_SRC=/path/to/NGC_GNU_SRC/NGC tools/sn-gcc/build.sh
+## Como funciona (sem emulação)
 
-# 2. copy in your disc images
-cp re4_debug_disc1.iso re4_debug_disc2.gcm orig/G4BE08/
+O código do jogo chama as funções originais do SDK do GameCube (`GXBegin`, `PADRead`, `DVDRead`, …). O Aurora **reimplementa essas funções em C++ moderno**: cada chamada vira SDL3/Vulkan nativo e tudo é compilado junto num único binário (`openre4`). Zero tradução de binário em tempo de execução.
 
-# 3. build
-python3 configure.py && ninja
+```
+src/game/*.cpp (lógica RE4) ──┐
+src/st1/*.cpp (salas Vila) ───┼──► openre4 (ELF x86_64 / .exe)
+src/platform/*.cpp (shims) ───┘         ▲
+vendor/aurora (GX→Vulkan, PAD→SDL, DVD) ─┘
 ```
 
-`ninja` finishes with a progress report that should say 100% matched and linked. To check the result,
-`build/tools/dtk shasum -c config/G4BE08/build.sha1` should print one `OK` per file, 115 in all.
+---
 
-When working on one unit, `python3 tools/bytecmp.py game/foo` compares its object file with the
-original, and `python3 tools/fdiff.py game/foo <symbol>` shows one function side by side.
+## Pré-requisitos
 
-## What's where
+* Linux x86_64 (testado em Pop!_OS 24.04, Mesa Vulkan 1.3), Python 3, CMake ≥ 3.25, Ninja, GCC/Clang com suporte a C++20
+* **Sua própria imagem** dos discos de depuração do GameCube `G4BE08` (Disc 1 + Disc 2, `.iso`/`.gcm`) — **não incluída no repo** por motivos legais
 
-- `src/game/` is the game itself. `src/em*/` are the enemies, `src/wep*/` the weapons, `src/pl*/` the
-  player characters and `src/st*/` the rooms, one REL per room. `src/t_*/`, `src/Tools/` and
-  `src/tools/` are the in-game debug editors, `src/Sscrn/` the menu screens and `src/lib/` the SDK,
-  CRI and runtime libraries.
-- `include/` has the headers, including the reconstructed structs.
-- `config/G4BE08/` has the unit lists, symbols, splits, linker scripts and per-REL data.
-- `tools/` has the build scripts, the compare tools, the SN compiler build and the research kit.
-  `tools/motion_export.py` exports the game's animations to glTF and BVH, see `tools/motion/README.md`.
-- `docs/overview.md` is a guide to how the engine fits together. `docs/matching.md` explains how the
-  matching was done and `docs/unit-notes.md` has notes per unit. `docs/research/` is the detailed log.
+## Build
 
-## How close is the match
+```sh
+git clone --recurse-submodules https://github.com/DevCoderMax/openre4.git
+cd openre4
 
-Every unit compiles to the original bytes with the original compilers. In some places the compiler
-only picks the same registers or instruction order as the original if the code is written in a
-particular way, and no natural way of writing it was found. Those spots are marked with a
-`// COMPILER-DIFF:` comment, 526 of them at the moment. Most are a dead test, an empty `asm("")` or a
-`register T x asm("rN")` declaration. None of them puts an instruction into the output, and
-`python3 tools/asmcheck.py --all` checks that. `docs/matching.md` explains the reason behind each
-kind. Getting this number down is ongoing work.
+# 1. discos (forneça os seus)
+cp re4_debug_disc1.gcm re4_debug_disc2.gcm orig/G4BE08/  # renomeie para re4_disc1.gcm / re4_disc2.gcm
 
-Almost all the assembly left is code the original developers also wrote in assembly, because their
-compilers couldn't express it in C. That's the paired-single math and matrix routines, the GQR setup,
-an exception handler, the cache and SPR code in the CRI video decoder, and eight startup, debugger and
-decompression units that were assembly to begin with. In the game code `asmcheck.py` counts 231
-instructions of it, with the eight assembly units counted separately. The exceptions are in the CRI
-libraries: one small block in `dct_ac` that works around a difference between our build of
-CodeWarrior and Capcom's, and 28 register pins that emit nothing. `docs/naming.md` lists all of it.
+# 2. extrair assets (1,6 GB em data/)
+python3 tools/extract_all_assets.py data
 
-## Names
+# 3. compilar o executável nativo
+cmake -S . -B build -G Ninja
+ninja -C build
+```
 
-Function names are Capcom's own, from `Bio4.sym`. They are C++ mangled names, which is why the game
-code is C++ and the SDK, CRI and C library code is C. File names and the split into units come from
-the `D:/Bio4/Prog/<file>.cpp` paths the asserts left in the binaries.
+## Executar
 
-Struct and field names come from three places. Most are Capcom's, taken from the debug information in
-the PS2 debug build and matched to the GameCube layouts with `tools/ps2sym.py`. Some are ours, named
-from how the code uses them. The rest are placeholders like `x1C`, named after their offset because
-their meaning isn't known yet. Capcom's names keep Capcom's spelling, so the naming style is mixed on
-purpose. Constants use the PS2 build's enums. `docs/naming.md` has the details.
+```sh
+./build/openre4               # título (pula logos por padrão)
+./build/openre4 --village     # vai direto p/ a Vila, sala r100 (modo debug atual)
+./build/openre4 --show-logos  # exibe as telas de logo originais
+```
 
-## Contributing
+### Controles (mapeamento PC atual)
 
-See `CONTRIBUTING.md` for the build, the three checks a change has to pass and the rules. The main rule
-is that the output bytes never change.
+| Tecla | GameCube |
+| :--- | :--- |
+| `W A S D` | Analógico principal (mover Leon) |
+| `I J K L` | C-Stick (câmera) |
+| `ESPAÇO` / `ENTER` | `A` (confirma/ação) |
+| `X` / `ESC` | `B` (cancela/corre) |
+| `C` / `V` | `X` / `Y` |
+| `Q` / `E` | Gatilhos `L` / `R` (mirar/atirar) |
+| `TAB` | Gatilho `Z` (mapa) |
+| Setas | D-Pad (menus) |
+| `ENTER` | `START` |
 
-## Legal
+---
 
-The reconstructed game and SDK source is the property of Capcom, Nintendo and CRI Middleware and is
-published for research and preservation only. The build scripts, tools, configuration and
-documentation written for this project are released under CC0, see `LICENSE`.
+## Estrutura
+
+```
+openre4/
+├── src/platform/      # código do porte: main_native.cpp, dolphin_shims.cpp, em/wep_native.cpp
+├── src/game/          # lógica do jogo (descompilação)
+├── src/st1/           # salas do Estágio 1 (Vila/Pueblo)
+├── src/em*, src/pl*, src/wep*/  # inimigos, personagens, armas
+├── include/           # headers (structs reconstruídas, SDK)
+├── vendor/aurora/     # HAL GameCube→PC (submódulo)
+├── tools/             # scripts (extração, diff, build matching)
+├── orig/G4BE08/       # SUAS imagens de disco (ignorado pelo git)
+├── data/              # assets extraídos (ignorado pelo git)
+├── docs/ROADMAP.md    # planejamento técnico + multiplayer
+└── CMakeLists.txt     # build nativo (Ninja)
+```
+
+> `configure.py` / `config/G4BE08/` pertencem ao fluxo original de *byte-matching* com os compiladores históricos (ProDG/CodeWarrior). O build nativo usa apenas o `CMakeLists.txt`.
+
+---
+
+## Multiplayer (planejado, não implementado)
+
+Servidor dedicado em Rust (UDP, 60 Hz) como autoridade de salas/IA; clientes enviam `PlayerSyncPacket` (posição, mira, arma, animação). MVP previsto: **Mercenaries co-op**, depois campanha. Ver [`docs/ROADMAP.md`](docs/ROADMAP.md) fases 3–5.
+
+---
+
+## Créditos e legal
+
+* Descompilação base: projeto `re4` (comunidade, `upstream`) — nomes de funções da Capcom via `Bio4.sym`.
+* HAL nativa: projeto Aurora (Luke Street / encounter) + lições da cena (Dolphin, Metaforce, Dusklight).
+* **Você precisa possuir o jogo original.** Nenhum asset, ISO ou executável da Capcom acompanha este repositório (`orig/`, `data/` e `*.gcm/*.iso` são ignorados pelo git).
+* O código reconstruído do jogo e do SDK pertence a Capcom, Nintendo e CRI Middleware e é publicado **para pesquisa e preservação**. Scripts, ferramentas e docs próprios do projeto: CC0 (ver `LICENSE`).
