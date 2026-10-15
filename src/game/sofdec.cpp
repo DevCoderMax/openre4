@@ -391,6 +391,12 @@ int cSofdec::startApp()
     cprm->max_stm = 2;
     cprm->wksize = mwPlyCalcWorkCprmSfd(cprm);
 #line 649 "D:/Bio4/Prog/sofdec.cpp"
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // Sem backend CRI no porte nativo ainda: wksize 0 = pula o filme sem travar.
+    if (cprm->wksize == 0) {
+        return 0;
+    }
+#endif
     cprm->work = MEM_ALLOC(cprm->wksize, 1, 13);
     if (cprm->work == NULL) {
         ap_mwply_err_func(NULL, "Can't Malloc.");
@@ -399,9 +405,16 @@ int cSofdec::startApp()
     m_ap_obj.mwsfd_wkadr = (s8*) cprm->work;
     hn = mwPlyCreateSofdec(cprm);
     if (hn == NULL) {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        // Sem backend: libera e relata "filme indisponivel" em vez de travar.
+        Mem_free(m_ap_obj.mwsfd_wkadr);
+        m_ap_obj.mwsfd_wkadr = NULL;
+        return 0;
+#else
         Mem_free(m_ap_obj.mwsfd_wkadr);
         ap_mwply_err_func(NULL, "Can't Create Handle.");
         return 0;
+#endif
     }
     m_ap_obj.mwply = hn;
     mwPlyStartFname(hn, m_ap_obj.fname);
@@ -431,6 +444,12 @@ int cSofdec::appMain()
     MWS_FRM frm;
     int stat;
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // Filme nao iniciado (sem backend): termina imediatamente.
+    if (m_ap_obj.mwply == NULL) {
+        return 0;
+    }
+#endif
     if (Joy[0].trg & 0x1200) {
         m_be_flag |= 0x20;
         return 0;
@@ -563,7 +582,15 @@ int cSofdec::initSub(const char* fname, u32 flags)
             return 0;
         }
         initApp(m_fname);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        // Sem backend de filme: desfaz o initWork e relata inativo (o chamador pula o filme).
+        if (startApp() == 0) {
+            finishMovie();
+            return 0;
+        }
+#else
         startApp();
+#endif
         StaFlagOn(pG, STA_MOVIE_ON);
         initSync();
         m_be_flag = flags | 1;
