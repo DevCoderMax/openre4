@@ -313,29 +313,42 @@ void ProcessTickInit()
 
 // The primitive buffer statistics live in the big GX block at pG + 0x184 in the original
 struct PrimBuffView {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    uintptr_t base;   // pG->prim_base
+    f32 rate;   // pG->prim_rate
+#else
     u8 pad_0[0x4F10 - 0x184];
     s32 base;   // pG->prim_base
     f32 rate;   // pG->prim_rate
+#endif
 };
 
 // Primitive (GX display list) buffer usage of the frame as a bar; warns in red above 90%.
 void PrimitiveBuffDisp()
 {
     static DbgTile tile[6];
-    DbgTile* t;
+    DbgTile* t = tile;
     int max = pG->nPrim;
-    PrimBuffView* pb;
     f32 rate;
+    f32 peak_rate;
 
     if (max == 0) {
         return;
     }
-    pb = (PrimBuffView*) &pG->gxStage;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    rate = 1.0f - (f32) (int) ((uintptr_t) pG->prim_cnt + max * (pG->DblBufIdx + 1) - (uintptr_t) pG->prim_base) / (f32) max;
+    if (pG->prim_rate < rate) {
+        pG->prim_rate = rate;
+    }
+    peak_rate = pG->prim_rate;
+#else
+    PrimBuffView* pb = (PrimBuffView*) &pG->gxStage;
     rate = 1.0f - (f32) (int) (pG->prim_cnt + max * (pG->DblBufIdx + 1) - pb->base) / (f32) max;
-    t = tile;
     if (pb->rate < rate) {
         pb->rate = rate;
     }
+    peak_rate = pb->rate;
+#endif
     if (rate > 0.9f && !DbgFlagChk(pG, DBG_WARN_LEVEL_LOW)) {
         pLog->warn(0, 0, "PrimitiveBuff :  work remain under 1/10");
     }
@@ -344,7 +357,7 @@ void PrimitiveBuffDisp()
         s16 width = 200;
 
         t->code = 4;
-        t->x0 = (s16) (pb->rate * (f32) width + (f32) width);
+        t->x0 = (s16) (peak_rate * (f32) width + (f32) width);
         t->y0 = 24;
         t->w = 4;
         t->h = 4;

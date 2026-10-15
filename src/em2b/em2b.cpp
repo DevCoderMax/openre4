@@ -174,7 +174,7 @@ static inline void em2bAtkEndSet(cEm2b* em, FREE_EM2B* w)
     // COMPILER-DIFF: #13 -- the original never allocates the single-use `w->Dog_wait` load (a REG_EQUIV
     // mem pseudo): reload materialises it in r11, so the global `flags`/`atkHit` pseudos take r0/r9;
     // ours local-allocates the load to r0 first.
-    register int x63c asm("r11");
+    register int x63c;
 
     if (w->pFriend && w->Atk_ck) {
         w->Be_flg |= 0x80;
@@ -204,7 +204,7 @@ static inline void em2bAtkEndSet(cEm2b* em, FREE_EM2B* w)
 // cross-jumps the arms' tails: 35 words; the plain form swaps the `mr`/`stw` pair: 2 words).
 static inline void em2bAtkEndSetL(cEm2b* em, FREE_EM2B* w)
 {
-    register int x63c asm("r11"); // COMPILER-DIFF: #13 (see em2bAtkEndSet)
+    register int x63c; // COMPILER-DIFF: #13 (see em2bAtkEndSet)
 
     if (w->pFriend && w->Atk_ck) {
         w->Be_flg |= 0x80;
@@ -861,7 +861,7 @@ static void em2b_R0_Init(cEm2b* em)
     // pseudos are kept alive past the block by a dead asm whose output is pinned to r7 (any pseudo
     // output lands in r8 and perturbs the init2 argument order).
     int r11c;
-    register int dmy7 asm("r7");
+    register int dmy7;
     Vec v;
 
     switch (em->type) {

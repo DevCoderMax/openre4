@@ -751,4 +751,6 @@ static void r224_str_check()
 }
 
 // The next unit's .data starts 8-aligned.
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

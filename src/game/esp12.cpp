@@ -83,7 +83,7 @@ void Esp12_Trans(cEsp12* esp)
     f32 tstep;
     f32 r;
     f32 wid;
-    register f32 z asm("fr12");  // COMPILER-DIFF: #13
+    register f32 z;  // COMPILER-DIFF: #13
     u32 magic;                   // COMPILER-DIFF: #13 (hoisted conversion constant)
 
     if (esp->m_Life_time < w->Num) {

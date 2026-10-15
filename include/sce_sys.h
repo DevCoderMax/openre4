@@ -149,9 +149,16 @@ void SceKill(TASK* t);
 void SceKill(void (*func)(int));
 
 // Em_flg row address as an integer (the original adds the list offset after the row index) (sce_at, sce_sys).
+#if defined(OPENRE4_NATIVE)
+static inline uintptr_t emDeadRow(int n)
+{
+    return (uintptr_t) EM_FLG_ROW(n);
+}
+#else
 static inline u32 emDeadRow(int n)
 {
     return (u32) EM_FLG_ROW(n);
 }
+#endif
 
 #endif

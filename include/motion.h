@@ -8,6 +8,14 @@
 #include "model.h"
 #include "cam_ctrl.h"
 
+#if defined(OPENRE4_NATIVE)
+#define GET_HERMITE_DATA(w, i) ((u8*) (w)->pMot + (w)->pHermite_data[(i)])
+void UnpackMotionNative(void* data);
+void UnpackSeqNative(void* seq);
+#else
+#define GET_HERMITE_DATA(w, i) ((u8*) (w)->pHermite_data[(i)])
+#endif
+
 // SEQUENCE_DATA / MotionData / MOTION_INFO are defined in model.h (cModel::Motion at 0x1D8).
 
 // MotionParts (cParts::motParts, 0x174) is defined in model.h.

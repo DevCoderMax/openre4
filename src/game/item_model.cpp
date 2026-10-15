@@ -3,6 +3,8 @@
 // item objects (obj16 etc.) fetch them with ItemGetBinTplAddr.
 #include "item_model.h"
 #include "main_mem.h"
+#include <cstdio>
+#include <cstdlib>
 
 cItmSys* g_pItemModelSys;
 
@@ -45,14 +47,26 @@ void ItemModelRoomInit()
 
 #line 94 "D:/Bio4/Prog/item_model.cpp"
     sys = (cItmSys*) MEM_ALLOC(sizeof(cItmSys), 1, 13);
+#if defined(OPENRE4_NATIVE)
+    if (!sys) {
+        printf("[OpenRE4 Debug] ItemModelRoomInit: MEM_ALLOC failed, using malloc fallback\n");
+        fflush(stdout);
+        sys = (cItmSys*) malloc(sizeof(cItmSys));
+    }
+#endif
     g_pItemModelSys = sys;
-    sys->Init();
+    if (sys) {
+        sys->Init();
+    }
 }
 
 // Registers every model of the room's ITM pack.
 int ItemModelDataLoad(void* data)
 {
-    return g_pItemModelSys->DataLoad((u32) data);
+    if (!g_pItemModelSys || !data) {
+        return 0;
+    }
+    return g_pItemModelSys->DataLoad((uintptr_t) data);
 }
 
 // Model binary of item `no`; 0 when the room has none.
@@ -97,18 +111,60 @@ void cItmSys::Init()
 }
 
 // Walks the pack's id / bin offset / tpl offset tables and registers each item id.
-int cItmSys::DataLoad(u32 data_addr)
+int cItmSys::DataLoad(uintptr_t data_addr)
 {
+    if (!data_addr) {
+        return 0;
+    }
     ItemModelPack* pack = (ItemModelPack*) data_addr;
-    ItemModelIdTbl* idTbl = (ItemModelIdTbl*) (data_addr + pack->ofsId);
-    ItemModelOfsTbl* binTbl = (ItemModelOfsTbl*) (data_addr + pack->ofsBin);
-    ItemModelOfsTbl* tplTbl = (ItemModelOfsTbl*) (data_addr + pack->ofsTpl);
+#if defined(OPENRE4_NATIVE)
+    u32 ofsId = pack->ofsId;
+    u32 ofsBin = pack->ofsBin;
+    u32 ofsTpl = pack->ofsTpl;
+    if (ofsId > 0x1000000 || ofsBin > 0x1000000 || ofsTpl > 0x1000000) {
+        ofsId = __builtin_bswap32(ofsId);
+        ofsBin = __builtin_bswap32(ofsBin);
+        ofsTpl = __builtin_bswap32(ofsTpl);
+    }
+#else
+    u32 ofsId = pack->ofsId;
+    u32 ofsBin = pack->ofsBin;
+    u32 ofsTpl = pack->ofsTpl;
+#endif
+
+    ItemModelIdTbl* idTbl = (ItemModelIdTbl*) (data_addr + ofsId);
+    ItemModelOfsTbl* binTbl = (ItemModelOfsTbl*) (data_addr + ofsBin);
+    ItemModelOfsTbl* tplTbl = (ItemModelOfsTbl*) (data_addr + ofsTpl);
     u32 i;
 
-    for (i = 0; i < idTbl->num; i++) {
-        u16 id = idTbl->id[i].id;
+#if defined(OPENRE4_NATIVE)
+    u32 num = idTbl->num;
+    if (num > 0x1000) {
+        num = __builtin_bswap32(num);
+    }
+#else
+    u32 num = idTbl->num;
+#endif
 
+    for (i = 0; i < num; i++) {
+#if defined(OPENRE4_NATIVE)
+        u16 id = idTbl->id[i].id;
+        if (id > 0x100) {
+            id = __builtin_bswap16(id);
+        }
+        u32 bOfs = binTbl->ofs[i];
+        if (bOfs > 0x1000000) {
+            bOfs = __builtin_bswap32(bOfs);
+        }
+        u32 tOfs = tplTbl->ofs[i];
+        if (tOfs > 0x1000000) {
+            tOfs = __builtin_bswap32(tOfs);
+        }
+        g_pItemModelSys->ItmRegist((u8*) binTbl + bOfs, (u8*) tplTbl + tOfs, (u8) id);
+#else
+        u16 id = idTbl->id[i].id;
         g_pItemModelSys->ItmRegist((u8*) binTbl + binTbl->ofs[i], (u8*) tplTbl + tplTbl->ofs[i], id);
+#endif
     }
     return 1;
 }

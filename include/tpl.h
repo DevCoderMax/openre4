@@ -42,5 +42,6 @@ struct TEXPalette {
 };
 
 extern "C" TEXDescriptor* TEXGet(TEXPalette* pal, u32 id);
+void UnpackTplNative(TEXPalette* tpl);
 
 #endif

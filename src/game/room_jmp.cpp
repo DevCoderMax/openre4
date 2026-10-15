@@ -67,30 +67,76 @@ void CRoomInfo::setNextPos()
     pG->Part_next = 0;
 }
 
+static CRoomInfo s_stageRooms[8][128];
+static s8 s_stageRoomCounts[8] = {0};
+static u32 s_numStages = 0;
+
 // Wraps the room info table (count, per-stage offsets, CRoomInfo records) and, on first use,
 // relocates its name / screen / programmer string offsets into pointers.
 cRoomJmp::cRoomJmp(void* p)
 {
-    u32 stage;
-    int i;
-    CRoomInfo* info;
-
     tbl = (u32*) p;
-    for (stage = 0; stage < tbl[0]; stage++) {
-        if (getIndexNum(stage) == 0) {
+    if (!tbl) return;
+
+    u32 num_stages = tbl[0];
+    bool is_be = false;
+    if (num_stages > 0x10000) {
+        num_stages = __builtin_bswap32(num_stages);
+        is_be = true;
+    }
+    s_numStages = (num_stages > 8) ? 8 : num_stages;
+
+    for (u32 st = 0; st < s_numStages; st++) {
+        u32 ofs = (tbl + 1)[st];
+        if (is_be) ofs = __builtin_bswap32(ofs);
+        if (ofs == 0) {
+            s_stageRoomCounts[st] = 0;
             continue;
         }
-        for (i = 0; i < getIndexNum(stage); i++) {
-            info = getRoomInfo(stage, i);
-            if (info == 0) {
-                continue;
+
+        u8* base = (u8*) tbl + ofs;
+        u32 count = *(u32*) base;
+        if (is_be) count = __builtin_bswap32(count);
+        if (count > 128) count = 128;
+        s_stageRoomCounts[st] = (s8) count;
+
+        for (u32 i = 0; i < count; i++) {
+            u8* rec = base + 4 + i * 32;
+            CRoomInfo* info = &s_stageRooms[st][i];
+
+            u16 flag = *(u16*)(rec + 0);
+            u16 roomNo = *(u16*)(rec + 2);
+            u32 px = *(u32*)(rec + 4);
+            u32 py = *(u32*)(rec + 8);
+            u32 pz = *(u32*)(rec + 12);
+            u32 ang = *(u32*)(rec + 16);
+            u32 name_ofs = *(u32*)(rec + 20);
+            u32 person_ofs = *(u32*)(rec + 24);
+            u32 person2_ofs = *(u32*)(rec + 28);
+
+            if (is_be) {
+                flag = __builtin_bswap16(flag);
+                roomNo = __builtin_bswap16(roomNo);
+                px = __builtin_bswap32(px);
+                py = __builtin_bswap32(py);
+                pz = __builtin_bswap32(pz);
+                ang = __builtin_bswap32(ang);
+                name_ofs = __builtin_bswap32(name_ofs);
+                person_ofs = __builtin_bswap32(person_ofs);
+                person2_ofs = __builtin_bswap32(person2_ofs);
             }
-            if ((u32) info->name >= 0x80000000 && (u32) info->name <= 0x82FFFFFF) {
-                return;
-            }
-            info->name = (char*) ((u32) tbl + (u32) info->name);
-            info->person = (char*) ((u32) tbl + (u32) info->person);
-            info->person2 = (char*) ((u32) tbl + (u32) info->person2);
+
+            info->flag = flag;
+            info->roomNo = roomNo;
+            union { f32 f; u32 u; } c;
+            c.u = px; info->pos.x = c.f;
+            c.u = py; info->pos.y = c.f;
+            c.u = pz; info->pos.z = c.f;
+            c.u = ang; info->angle = c.f;
+
+            info->name = (name_ofs != 0 && name_ofs < 0x100000) ? (char*)((u8*)tbl + name_ofs) : (char*)"";
+            info->person = (person_ofs != 0 && person_ofs < 0x100000) ? (char*)((u8*)tbl + person_ofs) : (char*)"";
+            info->person2 = (person2_ofs != 0 && person2_ofs < 0x100000) ? (char*)((u8*)tbl + person2_ofs) : (char*)"";
         }
     }
 }
@@ -98,13 +144,10 @@ cRoomJmp::cRoomJmp(void* p)
 // Number of jump-point records of `stage` (0 when the stage has no table).
 s8 cRoomJmp::getIndexNum(s8 stage)
 {
-    u32* p = tbl;
-    u32 ofs = ofsTbl(p)[stage];
-
-    if (ofs == 0) {
+    if (stage < 0 || stage >= (s8)s_numStages) {
         return 0;
     }
-    return *((s8*) p + ofs + 3);
+    return s_stageRoomCounts[stage];
 }
 
 // Number of jump points of `room`: consecutive records with the same room number.
@@ -127,26 +170,13 @@ s8 cRoomJmp::getPointNum(s8 stage, s8 room)
 // Record `idx` of `stage`, or 0 when out of range.
 CRoomInfo* cRoomJmp::getRoomInfo(u8 st, u8 idx)
 {
-    u32* p = tbl;
-    u32 ofs;
-    u32 n;
-    u32 base;
-
-    if (st >= p[0]) {
+    if (st >= s_numStages) {
         return 0;
     }
-    // COMPILER-DIFF: tie. The loop notes double the weight of this `ofs` set, so local-alloc
-    // allocates ofs before n (ofs r0, n r11) and global-alloc can give base the freed r0.
-    do { ofs = (p + 1)[st]; } while (0);
-    n = *(u32*) ((u8*) p + ofs);
-    base = (u32) p + ofs;
-    if (idx >= n) {
+    if (idx >= s_stageRoomCounts[st]) {
         return 0;
     }
-    {
-        u32 o = idx * sizeof(CRoomInfo) + 4;
-        return (CRoomInfo*) (base + o);
-    }
+    return &s_stageRooms[st][idx];
 }
 
 // Index of the first record of `room` in `stage` (0 when not found).
@@ -173,12 +203,11 @@ void cRoomJmp::setNextPos(u8 Stage, u8 Room)
 // Next (dir +1) / previous (-1) stage that has a table, wrapping.
 s8 cRoomJmp::getNextStageNo(s8 stage, int add)
 {
-    u32* p = tbl;
-    u32 n = p[0];
-
+    u32 n = s_numStages;
+    if (n == 0) return 0;
     do {
         stage = (n + stage + add) % n;
-    } while (ofsTbl(p)[stage] == 0);
+    } while (s_stageRoomCounts[stage] == 0);
     return stage;
 }
 
@@ -240,7 +269,7 @@ s8 cRoomJmp::getNextPointNo(s8 stage, s8 room, s8 point, s8 add)
 // `room` when it is a valid record of `stage`, else -1.
 s8 cRoomJmp::checkRoomNo(s8 stage, s8 room)
 {
-    if ((u8) stage >= tbl[0] || getIndexNum(stage) == 0 || getRoomInfo(stage, room) == 0) {
+    if ((u8) stage >= s_numStages || getIndexNum(stage) == 0 || getRoomInfo(stage, room) == 0) {
         return -1;
     }
     return room;

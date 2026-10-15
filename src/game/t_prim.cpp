@@ -3,6 +3,7 @@
 #include "gx.h"
 #include "t_prim.h"
 #include "camera.h"
+#include <string.h>
 
 
 void set_attr_common();

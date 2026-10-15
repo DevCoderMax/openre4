@@ -44,7 +44,7 @@ extern JOY Joy[4];
 // game/debug.cpp: pad used by the debug tools (currently &Joy[0])
 JOY* GetBugCheckController();
 
-extern "C" void* memcpy(void* dst, const void* src, unsigned int n);
+#include <string.h>
 
 // Pad snapshot used by the debug tools: copies Joy[no] into the tool work at byte offset `ofs`.
 // The destination is byte-pointer arithmetic on purpose: only then does GCC 2.95 treat the

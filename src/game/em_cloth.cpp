@@ -209,7 +209,7 @@ void Em34ClothSet1(cModel* pEm, CLOTH_INFO* pCloth)
     {
         // COMPILER-DIFF: 13 (local-alloc qty order): a codeless prio-4 filler issued before the
         // pUp2 `lis` in sched1 equalises the pUp2/pDown2/pMax2 qty lives (r10/r8/r7 in qty order).
-        register u32 k asm("r12");
+        register u32 k;
         asm("" : "=r"(k));
         asm("" : "=m"(em34ClothRate[1]) : "r"(k));
     }
@@ -661,4 +661,6 @@ static void Em30ClothStop(cModel* m, CLOTH_INFO* c)
     c->WindSin = 0.0f;
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

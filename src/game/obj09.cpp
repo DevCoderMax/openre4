@@ -669,4 +669,6 @@ void cObj09::move()
     partsWorldCalc();
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

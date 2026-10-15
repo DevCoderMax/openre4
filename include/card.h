@@ -254,7 +254,7 @@ public:
     public: void resetStatus(u32 bit) { m_Status &= ~bit; }
 
 #line 386 "D:/Bio4/Prog/card.h"
-    void* operator new(unsigned int size) { return MEM_CALLOC(size, 1, 13); }
+    void* operator new(size_t size) { return MEM_CALLOC(size, 1, 13); }
     void operator delete(void* p) { Mem_free(p); }
 };
 

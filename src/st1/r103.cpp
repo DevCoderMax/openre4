@@ -46,7 +46,9 @@ typedef struct _SHELF_SMD {
 static R103Work* r103_work;
 
 // The original's .data is 8-aligned (r105 has the same).
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif
 DATA_WORK r103_cesspit = {0x52, 0x53, 0x8A, 0x9E, 6, 3, 0xA};
 static SHELF_SMD r103_shelf0 = {{0x57, 0x58}};
 static SHELF_SMD r103_shelf1 = {{0x59, 0x5A}};
@@ -146,7 +148,7 @@ void r103_openShelf_main(SHELF_SMD* s, int opened)
             // reload_cse after both take r10) is issued between the second `lis` and its `lfs`
             // in sched1, which equalises the spans and lets the qty number decide.
             cModel* pa = *(cModel* volatile*) &a->pList;
-            register cModel* pa2 asm("r10");
+            register cModel* pa2;
 
             pa2 = pa;
             pa2->ang.y = ra;

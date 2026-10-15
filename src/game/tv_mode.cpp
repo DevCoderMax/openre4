@@ -28,6 +28,17 @@ u8 tv_mode_cnt;
 #line 26
 void SetTvMode(GXRenderModeObj* pRmode)
 {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    pRmode->viTVmode = VI_TVMODE_NTSC_PROG;
+    pRmode->xFBmode = VI_XFBMODE_SF;
+    if (pRK) {
+        pRK->tv_mode = 1;
+        pRK->tv_mode_select = 1;
+        pRK->MemcardCheckDone = 1;
+    }
+    pG->CardStatus |= 0x80000000;
+    return;
+#else
     pTv = (TV_MODE*) MEM_CALLOC(sizeof(TV_MODE), 1, 0xD);
     pTv->pRmode = pRmode;
     switch (VIGetTvFormat()) {
@@ -54,6 +65,7 @@ void SetTvMode(GXRenderModeObj* pRmode)
     }
     pTv->Status = 1;
     TaskExec(1, tvModeCheckTask, 0);
+#endif
 }
 
 // Task: black fade, then the state machine (trigger -> progressive menu -> exit).

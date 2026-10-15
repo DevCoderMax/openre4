@@ -1127,3 +1127,10 @@ int SceCkFindPL(f32* dist)
     }
     return 0;
 }
+
+#include "em27.h"
+void cEm27::setWaterHeight(f32 h)
+{
+    EM27_WK(this)->Water_h = h;
+}
+

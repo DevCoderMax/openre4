@@ -296,12 +296,27 @@ int getRoomEtcID(int no)
 // when missing.
 void* GetEtcAddr(void* arc, const char* name)
 {
+    if (!arc || !name) {
+        return 0;
+    }
     EtcArc* a = (EtcArc*) arc;
+#if defined(OPENRE4_NATIVE)
+    u32* magic = (u32*) &a->pad_4[0];
+    if (*magic != 0x45544150) { // 'ETAP'
+        a->num = __builtin_bswap32(a->num);
+        EtcArcFile* f = a->file;
+        for (u32 i = 0; i < a->num; i++) {
+            f->size = __builtin_bswap32(f->size);
+            f = (EtcArcFile*) ((u8*) f + f->size);
+        }
+        *magic = 0x45544150;
+    }
+#endif
     EtcArcFile* f = a->file;
     u32 i;
 
     for (i = 0; i < a->num; i++) {
-        if (strcmp(f->name, name) == 0) {
+        if (strncmp(f->name, name, 32) == 0) {
             return f->data;
         }
         f = (EtcArcFile*) ((u8*) f + f->size);
@@ -368,9 +383,29 @@ int EtcModelListSet(EtcList* list)
     ETS_DATA* d;
     u32 i;
 
-    if (DbgFlagChk(pG, DBG_NO_ETC_SET)) {
+    if (!list || DbgFlagChk(pG, DBG_NO_ETC_SET)) {
         return 0;
     }
+
+#if defined(OPENRE4_NATIVE)
+    u32* magic = (u32*) &list->pad_2[0];
+    if (*magic != 0x45545350) { // 'ETSP'
+        list->num = __builtin_bswap16(list->num);
+        d = list->data;
+        for (i = 0; i < list->num; i++) {
+            d[i].id = __builtin_bswap16(d[i].id);
+            d[i].no = __builtin_bswap16(d[i].no);
+            u32* ax = (u32*) &d[i].ang.x; *ax = __builtin_bswap32(*ax);
+            u32* ay = (u32*) &d[i].ang.y; *ay = __builtin_bswap32(*ay);
+            u32* az = (u32*) &d[i].ang.z; *az = __builtin_bswap32(*az);
+            u32* px = (u32*) &d[i].pos.x; *px = __builtin_bswap32(*px);
+            u32* py = (u32*) &d[i].pos.y; *py = __builtin_bswap32(*py);
+            u32* pz = (u32*) &d[i].pos.z; *pz = __builtin_bswap32(*pz);
+        }
+        *magic = 0x45545350;
+    }
+#endif
+
     d = list->data;
     for (i = 0; i < list->num; i++) {
         if (EtcModelSet(&d[i]) == 1) {

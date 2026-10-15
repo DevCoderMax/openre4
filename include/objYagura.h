@@ -14,7 +14,7 @@ struct YaguraWork {
 // Ladder (yagura = tower): a static collision model that can play a vibration motion.
 class cObjYagura : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  YaguraWork
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  YaguraWork
 
     virtual void move();
 

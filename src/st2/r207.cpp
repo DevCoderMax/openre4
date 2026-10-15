@@ -848,4 +848,6 @@ static void r207_StrCheck()
 }
 
 // The next unit's .data is 8-aligned: the split object carries the 4 bytes of padding.
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

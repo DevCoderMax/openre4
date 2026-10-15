@@ -10,10 +10,17 @@ void Snd_iss_blk_init(u32 blk_no, void* data)
 
     blk = &Snd_iss_blk[blk_no];
     p = (u32*) data;
+#if defined(OPENRE4_NATIVE)
+    blk->sit_num = __builtin_bswap32(*p++);
+    blk->wt_adrs = (u8*) data + __builtin_bswap32(*p++);
+    blk->sit_adrs = (SND_SIT*) ((u8*) data + __builtin_bswap32(*p++));
+    blk->seq_adrs = (u8*) data + __builtin_bswap32(*p++);
+#else
     blk->sit_num = *p++;
     blk->wt_adrs = (u8*) data + *p++;
     blk->sit_adrs = (SND_SIT*) ((u8*) data + *p++);
     blk->seq_adrs = (u8*) data + *p++;
+#endif
 }
 
 // Registers a stream block from its file header (count, stream headers, RIT offsets).
@@ -24,9 +31,15 @@ void Snd_str_blk_init(u32 blk_no, void* data)
 
     blk = &Snd_str_blk[blk_no];
     p = (u32*) data;
+#if defined(OPENRE4_NATIVE)
+    blk->rit_num = __builtin_bswap32(*p++);
+    blk->sbh_adrs = (u8*) data + __builtin_bswap32(*p++);
+    blk->rit_adrs = (SND_RIT*) ((u8*) data + __builtin_bswap32(*p++));
+#else
     blk->rit_num = *p++;
     blk->sbh_adrs = (u8*) data + *p++;
     blk->rit_adrs = (SND_RIT*) ((u8*) data + *p++);
+#endif
 }
 
 // The ISS block `blk_no`.

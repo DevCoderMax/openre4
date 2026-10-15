@@ -473,6 +473,7 @@ void cObjLauncher::setMotion(cPlayer* pEm)
     }
 }
 
+#ifndef OPENRE4_NATIVE
 template <class T>
 // destroy() with the deferred flag cleared: the object is removed immediately.
 void cManager<T>::destroyNow(T* p)
@@ -483,3 +484,4 @@ void cManager<T>::destroyNow(T* p)
     destroy(p);
     flag = f;
 }
+#endif

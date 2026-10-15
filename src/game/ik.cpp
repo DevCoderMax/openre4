@@ -90,7 +90,9 @@ void IKInit(cModel* pEm, MOTION_INFO* pInfo)
         }
         if (kind & 0x20) {
             IK_FLAGS(root) |= 0x100;
-            root->pList->pList->pList->motParts.ikAng = 0.0f;
+            if (root->pList != NULL && root->pList->pList != NULL && root->pList->pList->pList != NULL) {
+                root->pList->pList->pList->motParts.ikAng = 0.0f;
+            }
         }
         if (kind & 0x80) {
             u32 f = IK_FLAGS(root) | 0x210;

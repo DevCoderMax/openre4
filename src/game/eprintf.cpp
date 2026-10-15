@@ -329,10 +329,34 @@ void EprintfInit()
 #line 832 "D:/Bio4/Prog/eprintf.cpp"
     req = DvdReadN(name, NULL, 0, 0, 0, 3, __FILE__, __LINE__);
     if (Dvd.ReadCheck(req, NULL, NULL, &addr) >= 0) {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        UnpackTplNative((TEXPalette*) addr);
+        TEXDescriptor* desc = TEXGet((TEXPalette*) addr, 0);
+        if (desc && desc->textureHeader) {
+            img = desc->textureHeader;
+            GXInitTexObj(&fontTexObj, img->data, img->width, img->height, img->format, img->wrapS, img->wrapT, 0);
+            PSMTXScale(fontTMtx, 1.0f, 256.0f / (f32) img->height, 1.0f);
+        } else {
+            img = (TEXHeader*) ((u8*) addr + 0x14);
+            u16 w = img->width;
+            u16 h = img->height;
+            u32 fmt = img->format;
+            u32 dataOfs = (u32)(uintptr_t) img->data;
+            if (fmt >= 0x01000000) {
+                fmt = __builtin_bswap32(fmt);
+                w = __builtin_bswap16(w);
+                h = __builtin_bswap16(h);
+                dataOfs = __builtin_bswap32(dataOfs);
+            }
+            GXInitTexObj(&fontTexObj, (void*) ((u8*) addr + dataOfs), w, h, fmt, 0, 0, 0);
+            PSMTXScale(fontTMtx, 1.0f, 256.0f / (f32) h, 1.0f);
+        }
+#else
         img = (TEXHeader*) ((u8*) addr + 0x14);
         GXInitTexObj(&fontTexObj, (void*) ((u32) img->data + (u32) addr), img->width, img->height, img->format, img->wrapS,
                      img->wrapT, 0);
         PSMTXScale(fontTMtx, 1.0f, 256.0f / img->height, 1.0f);
+#endif
         mess_keep_buffer = (char*) Debug_alloc(MESS_KEEP_SIZE, 1);
         mess_ptr_buff = (char*) Debug_alloc(MESS_PTR_NUM * 4, 1);
         eprintf_init = 1;

@@ -370,4 +370,6 @@ int cPlPush::plAdjust()
 }
 
 // the split object's .rodata is 8-aligned (0xE0, the pool ends at 0xDC)
+#ifndef OPENRE4_NATIVE
 asm(".section .rodata; .balign 8");
+#endif

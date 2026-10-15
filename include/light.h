@@ -299,6 +299,7 @@ public:
     int getSafeCutNo(int cutNo);
     int versionUp();
     u32 getMaxLight();
+    void convertEndian();
 };
 
 // Light list a model / effect draws with (cModel::lightInfo.pLight, ESP_LIGHT_ENV).

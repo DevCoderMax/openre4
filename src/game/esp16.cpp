@@ -156,7 +156,7 @@ void Esp16_Trans(cEsp16* esp)
     f32 s1;
     f32 rate;
     f32 half;
-    register f32 z asm("fr12"); // COMPILER-DIFF: #13
+    register f32 z; // COMPILER-DIFF: #13
 
     if (esp->m_Life_time < w->Num) {
         n = esp->m_Life_time + 1;

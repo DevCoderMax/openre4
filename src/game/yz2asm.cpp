@@ -3,6 +3,8 @@
  * the functions are whole-function asm() bodies, reproduced from the split object. */
 #include "asm_regs.h"
 
+#if defined(__powerpc__) || defined(__ppc__)
+
 asm("	.text\n"
     "	.balign 4\n");
 
@@ -500,3 +502,196 @@ asm("	.globl .float_zero_data\n"
     ".float_zero_data:\n"
     "	.float 0\n"
     "	.size .float_zero_data,.-.float_zero_data\n");
+
+#else
+#include "types.h"
+#include "yz2code.h"
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+struct Yz2ModelNative {
+    int n;
+    uint16_t freq[1280];
+    uint16_t cum_f[1280];
+    uint16_t cum_s[1280];
+    int total;
+    int bits;
+    int range;
+
+    void init(int count) {
+        n = count;
+        int base = 0x8000 / n;
+        int rem = 0x8000 % n;
+        uint16_t s = 0;
+        for (int i = 0; i < n; i++) {
+            uint16_t f = base + (i < rem ? 1 : 0);
+            cum_f[i] = f;
+            cum_s[i] = s;
+            s += f;
+        }
+        for (int i = 0; i < n; i++) {
+            freq[i] = 1;
+        }
+        total = n;
+        bits = 0;
+        if (n >= 1) {
+            while (true) {
+                bits++;
+                if (bits > 14) break;
+                if (n < (1 << bits)) break;
+            }
+        }
+        range = 1 << bits;
+    }
+};
+
+static inline int decode_sym(Yz2ModelNative& m, uint32_t& R, uint32_t& C, const uint8_t*& src) {
+    if (R <= 0x800000) {
+        if (R > 0x8000) {
+            C = ((C << 8) | *src++);
+            R <<= 8;
+        } else if (R > 0x80) {
+            C = ((C << 16) | (src[0] << 8) | src[1]);
+            R <<= 16;
+            src += 2;
+        } else {
+            C = ((C << 24) | (src[0] << 16) | (src[1] << 8) | src[2]);
+            R <<= 24;
+            src += 3;
+        }
+    }
+    uint32_t step = R >> 14;
+    uint32_t value = C / step;
+    if (value >= 0x8000) value = 0x7FFF;
+
+    int low = 0, high = m.n - 1, s = 0;
+    while (low <= high) {
+        int mid = (low + high) / 2;
+        if (m.cum_s[mid] <= value) {
+            s = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    C -= step * m.cum_s[s];
+    R = (step * m.cum_f[s]) >> 1;
+
+    m.freq[s]++;
+    m.total++;
+    if (m.bits <= 14) {
+        if (m.total == m.range) {
+            int sh = 15 - m.bits;
+            uint16_t run = 0;
+            for (int i = 0; i < m.n; i++) {
+                uint16_t v = m.freq[i] << sh;
+                m.cum_s[i] = run;
+                run += v;
+                m.cum_f[i] = v;
+            }
+            m.bits++;
+            m.range = 1 << m.bits;
+        }
+    } else if (m.total > 0x7FFF) {
+        uint16_t run = 0;
+        int total = 0;
+        for (int i = 0; i < m.n; i++) {
+            uint16_t v = m.freq[i];
+            m.cum_f[i] = v;
+            m.cum_s[i] = run;
+            run += v;
+            if (v > 1) v >>= 1;
+            m.freq[i] = v;
+            total += v;
+        }
+        m.total = total;
+    }
+    return s;
+}
+
+extern "C" void yz2Decode_Decode(void* ctx, void* dst, u32 size, void* ev) {
+    Yz2InEv* event = (Yz2InEv*) ev;
+    Yz2Ctx* c = (Yz2Ctx*) ctx;
+    const uint8_t* src = event->src;
+    uint8_t* out = (uint8_t*) dst;
+    uint32_t unpacked = size;
+
+    Yz2ModelNative main_model;
+    main_model.init(0x500);
+    Yz2ModelNative side_model;
+    side_model.init(0x100);
+
+    uint32_t R = 0x80;
+    uint32_t C = c ? c->d.byte : *src++;
+
+    static int dic_ptr[256 * 512];
+    static int dic_len[256 * 512];
+    static int dic_cnt[256];
+    memset(dic_ptr, -1, sizeof(dic_ptr));
+    memset(dic_len, 0, sizeof(dic_len));
+    memset(dic_cnt, 0, sizeof(dic_cnt));
+
+    uint32_t o = 0;
+    uint32_t scan = 0;
+    while (o < unpacked) {
+        int s = decode_sym(main_model, R, C, src);
+        int length = 0;
+        if (s > 0x3FF) {
+            out[o++] = (uint8_t)(s & 0xFF);
+            length = 1;
+        } else {
+            uint8_t ctx_b = out[scan];
+            int ebase = ctx_b * 512;
+            int slot = (s + dic_cnt[ctx_b]) & 0x1FF;
+            int src_off = dic_ptr[ebase + slot];
+            if (s > 0x1FF) {
+                length = dic_len[ebase + slot];
+            } else {
+                int t = decode_sym(side_model, R, C, src);
+                if (t > 2) {
+                    length = t;
+                } else if (t == 2) {
+                    int b0 = decode_sym(side_model, R, C, src);
+                    int b1 = decode_sym(side_model, R, C, src);
+                    length = (b0 << 8) | b1;
+                } else if (t == 1) {
+                    int b0 = decode_sym(side_model, R, C, src);
+                    int b1 = decode_sym(side_model, R, C, src);
+                    int b2 = decode_sym(side_model, R, C, src);
+                    length = (b0 << 16) | (b1 << 8) | b2;
+                } else {
+                    int b0 = decode_sym(side_model, R, C, src);
+                    int b1 = decode_sym(side_model, R, C, src);
+                    int b2 = decode_sym(side_model, R, C, src);
+                    int b3 = decode_sym(side_model, R, C, src);
+                    length = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+                }
+                length -= 1;
+            }
+            if (length <= 0 || src_off < 0 || o + length > unpacked) {
+                break;
+            }
+            if (src_off + length <= (int)o) {
+                memcpy(&out[o], &out[src_off], length);
+            } else {
+                for (int k = 0; k < length; k++) {
+                    out[o + k] = out[src_off + k];
+                }
+            }
+            o += length;
+        }
+
+        int last = (int)o - 1;
+        if ((int)scan < last) {
+            uint8_t ctx_b = out[scan];
+            int cnt = dic_cnt[ctx_b];
+            dic_ptr[ctx_b * 512 + cnt] = scan + 1;
+            dic_len[ctx_b * 512 + cnt] = length;
+            dic_cnt[ctx_b] = (cnt + 1) & 0x1FF;
+            scan = last;
+        }
+    }
+}
+#endif

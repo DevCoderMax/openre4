@@ -23,7 +23,7 @@ struct FREE_OBJ20 {
 // one of its parts, type 1: to the object itself) or standing alone.
 class cObjObaModel : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ20
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ20
 
     virtual void move();
 };

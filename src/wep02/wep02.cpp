@@ -44,13 +44,19 @@ void Wep02_init(cModel* m)
 }
 
 // REL entry: registers the weapon init / move routines and both object constructor slots.
-extern "C" void _prolog()
+void Wep02_prolog()
 {
     WeaponInitFunc = Wep02_init;
     WeaponMoveFunc = PlHandgunMove;
     ObjInitFunc[0x21] = ObjRuger_init;
     ObjInitFunc[0x27] = ObjMauser_init;
     OSReport("Wep02 HANDGUN prolog Ok\n");
+}
+
+#if !defined(OPENRE4_NATIVE)
+extern "C" void _prolog()
+{
+    Wep02_prolog();
 }
 
 // REL exit: frees the object constructor slots.
@@ -64,3 +70,4 @@ extern "C" void _epilog()
 extern "C" void _unresolved()
 {
 }
+#endif

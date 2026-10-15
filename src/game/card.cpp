@@ -153,9 +153,7 @@ public:
 };
 
 void dispSaveInfo(int no, SaveInfo* info, int type, int broken);
-// cCard::exit passes the saved int width as a full word (`lwz`, not the `lhz 0x41a` narrowing a u16
-// parameter gets): int view of ScreenReSize.
-extern "C" void ScreenReSizeI(int w, int h) asm("ScreenReSize__FUsUs");
+void ScreenReSize(u16 w, u16 h);
 
 int isDbgInfoAlloc = 0;
 static int isDbgInfoCached = 0;
@@ -1126,7 +1124,7 @@ void cCard::exit()
         if (!(pG->CardStatus & 0x80)) {
             pG->Disp_flg = m_DPFbak;
             SndStrReq(m_SndId, 4, 200, 0);
-            ScreenReSizeI(m_Width_bak, 448);
+            ScreenReSize((u16)m_Width_bak, 448);
             if (m_aMode != 0 || !(pG->CardStatus & 4)) {
                 if (!(pG->CardStatus & 0x10)) {
                     c0 = 0xFF;
@@ -3669,4 +3667,6 @@ void setMsgBG(int a, int flag)
     }
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 32");
+#endif

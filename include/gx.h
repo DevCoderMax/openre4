@@ -7,8 +7,9 @@
 #include "types.h"
 #include <dolphin/vi/vitypes.h>
 
-#ifndef _DOLPHIN_GX_GXSTRUCT_H_
+#if !defined(_DOLPHIN_GX_GXSTRUCT_H_) && !defined(DOLPHIN_GXSTRUCT_H)
 #define _DOLPHIN_GX_GXSTRUCT_H_
+#define DOLPHIN_GXSTRUCT_H
 
 typedef struct {
     u8 r, g, b, a;
@@ -19,12 +20,20 @@ typedef struct {
 } GXColorS10;
 
 typedef struct {
+#ifdef TARGET_PC
+    u32 dummy[16];
+#else
     u32 dummy[8];
-} GXTexObj;  // 0x20
+#endif
+} GXTexObj;  // 0x20 on GC, 0x40 on PC
 
 typedef struct {
+#ifdef TARGET_PC
+    u32 dummy[10];
+#else
     u32 dummy[3];
-} GXTlutObj;  // 0x0C
+#endif
+} GXTlutObj;  // 0x0C on GC, 0x28 on PC
 
 typedef struct {
     u32 dummy[16];
@@ -50,8 +59,102 @@ typedef struct {
 
 // Immediate-mode vertex FIFO (dolphin/gx/GXVert.h). Writes are volatile, so GCC reloads
 // everything between them.
-#ifndef __GXVERT_H__
+#if !defined(__GXVERT_H__) && !defined(DOLPHIN_GXVERT_H)
 #define __GXVERT_H__
+#define DOLPHIN_GXVERT_H
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void GXPosition3f32(f32 x, f32 y, f32 z);
+void GXPosition3u16(u16 x, u16 y, u16 z);
+void GXPosition3s16(s16 x, s16 y, s16 z);
+void GXPosition3u8(u8 x, u8 y, u8 z);
+void GXPosition3s8(s8 x, s8 y, s8 z);
+
+void GXPosition2f32(f32 x, f32 y);
+void GXPosition2u16(u16 x, u16 y);
+void GXPosition2s16(s16 x, s16 y);
+void GXPosition2u8(u8 x, u8 y);
+void GXPosition2s8(s8 x, s8 y);
+
+void GXPosition1x16(u16 index);
+void GXPosition1x8(u8 index);
+
+void GXNormal3f32(f32 x, f32 y, f32 z);
+void GXNormal3s16(s16 x, s16 y, s16 z);
+void GXNormal3s8(s8 x, s8 y, s8 z);
+
+void GXNormal1x16(u16 index);
+void GXNormal1x8(u8 index);
+
+void GXColor4u8(u8 r, u8 g, u8 b, u8 a);
+void GXColor3u8(u8 r, u8 g, u8 b);
+void GXColor1u32(u32 clr);
+void GXColor1u16(u16 clr);
+void GXColor1x16(u16 index);
+void GXColor1x8(u8 index);
+
+void GXTexCoord2f32(f32 s, f32 t);
+void GXTexCoord2u16(u16 s, u16 t);
+void GXTexCoord2s16(s16 s, s16 t);
+void GXTexCoord2u8(u8 s, u8 t);
+void GXTexCoord2s8(s8 s, s8 t);
+
+void GXTexCoord1f32(f32 s);
+void GXTexCoord1u16(u16 s);
+void GXTexCoord1s16(s16 s);
+void GXTexCoord1u8(u8 s);
+void GXTexCoord1s8(s8 s);
+
+void GXTexCoord1x16(u16 index);
+void GXTexCoord1x8(u8 index);
+
+void GXMatrixIndex1u8(u8 index);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void GXWriteFifoU8(u8 val);
+void GXWriteFifoU16(u16 val);
+void GXWriteFifoU32(u32 val);
+void GXWriteFifoF32(f32 val);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+struct WGPipe {
+    struct PipeU8 { void operator=(u8 v) { GXWriteFifoU8(v); } } u8;
+    struct PipeU16 { void operator=(u16 v) { GXWriteFifoU16(v); } } u16;
+    struct PipeS16 { void operator=(s16 v) { GXWriteFifoU16(static_cast<uint16_t>(v)); } } s16;
+    struct PipeU32 { void operator=(u32 v) { GXWriteFifoU32(v); } } u32;
+    struct PipeS32 { void operator=(s32 v) { GXWriteFifoU32(static_cast<uint32_t>(v)); } } s32;
+    struct PipeF32 { void operator=(f32 v) { GXWriteFifoF32(v); } } f32;
+};
+extern WGPipe GXWGFifo[];
+#else
+typedef struct {
+    u8 u8;
+    u16 u16;
+    u32 u32;
+    s16 s16;
+    s32 s32;
+    f32 f32;
+} WGPipe;
+extern volatile WGPipe GXWGFifo[];
+#endif
+
+#else
+
 typedef union {
     u8 u8;
     u16 u16;
@@ -133,6 +236,7 @@ static inline void GXTexCoord2s16(s16 s, s16 t)
     GXWGFifo->s16 = t;
 }
 #endif
+#endif
 
 // GX API entry points used by game code. Enum parameters are declared as plain ints: the
 // SDK enum headers pull in the CodeWarrior libc.
@@ -158,7 +262,7 @@ void GXClearVtxDesc(void);
 void GXSetVtxDesc(int attr, int type);
 void GXSetVtxAttrFmt(int vtxfmt, int attr, int cnt, int type, u8 frac);
 void GXSetArray(int attr, void* base_ptr, u8 stride);
-void GXCallDisplayList(void* list, u32 nbytes);
+void GXCallDisplayList(const void* list, u32 nbytes);
 void GXLoadPosMtxImm(const f32 mtx[3][4], u32 id);
 void GXLoadNrmMtxImm(const f32 mtx[3][4], u32 id);
 void GXLoadTexMtxImm(const f32 mtx[][4], u32 id, int type);
@@ -240,6 +344,9 @@ void GXProject(f32 x, f32 y, f32 z, const f32 mtx[3][4], const f32* pm, const f3
 // indirect texturing (trans)
 void __GXSetIndirectMask(u32 mask);
 void GXSetTevIndBumpXYZ(int tev_stage, int ind_stage, int matrix_sel);
+typedef void (*GXDrawSyncCallback)(u16 token);
+void GXSetDrawSync(u16 token);
+GXDrawSyncCallback GXSetDrawSyncCallback(GXDrawSyncCallback cb);
 #ifdef __cplusplus
 }
 #endif

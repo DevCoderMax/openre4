@@ -693,7 +693,7 @@ int DB_WINDOW::CallActiveChangeCallback(DB_PRIMITIVE* p, DB_KEYBORD* k)
 {
     // COMPILER-DIFF: candidate #17 (the original allocates `ret` to the return register first and copies
     // `this` to r9; ours gives `this` r3 and `ret` r9 -- no plain form flips the order)
-    register int ret asm("r3");
+    register int ret;
     ret = 0;
 
     if (activeChangeCb != 0) {
@@ -1014,7 +1014,7 @@ DB_NUMERIC::DB_NUMERIC() : DB_STRING(255, "")
         // block it is a free-unit insn ready at the same cycle as `fmr f1,f31` and, ranking above the
         // fmr by LUID, it takes the block's second issue slot (issue rate 2), which pushes the fmr one
         // store later; `step = one; unit = one;` is the order that survives the asm's move.
-        register f32 one asm("fr13");
+        register f32 one;
         minus = 0;
         pNum = 0;
         min = 0.0f;

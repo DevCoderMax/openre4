@@ -8,6 +8,7 @@
 #include "main_mem.h"
 #include "flag.h"
 #include <string.h>
+#include <stdlib.h>
 
 #line 8 "D:/Bio4/Prog/event.h"
 
@@ -544,7 +545,6 @@ enum ModEtcFlag {
     OyaRide = 2
 };
 
-extern "C" int atoi(const char* s);
 
 // Event debug tool work (game/event.cpp `EvtDebug`, 0xE8 bytes).
 class EventDebug {

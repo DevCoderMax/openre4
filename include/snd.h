@@ -218,9 +218,15 @@ struct SndMemWork {
     u8* blk_mram[14];        // 0x14  per block MRAM data address (dvd.cpp fills it)
     u32 blk_aram[14];        // 0x4C  per block ARAM sample address
     u8* mram_end;            // 0x84  end of the fixed sound data in MRAM
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+    uintptr_t str_buf[4];    // 0x88  stream buffers
+    uintptr_t sub_adr;       // 0x98  sub screen sound data
+    uintptr_t sub_end;       // 0x9C
+#else
     u32 str_buf[4];          // 0x88  stream buffers
     u32 sub_adr;             // 0x98  sub screen sound data
     u32 sub_end;             // 0x9C
+#endif
 };
 
 // Recent SndCall log (debug display, 25 entries).

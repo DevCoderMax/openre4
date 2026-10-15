@@ -74,7 +74,11 @@ void Espgen45_static_init()
 // u8 to f32 through GQR2 from a stack byte, since the compiler only emits psq_l from its own fpmem slot.
 // The volatile asm is also the scheduling barrier that gives the target's order in loop A. Same definition
 // as trans.cpp, kept in this unit so asmcheck.py counts it.
+#if defined(__powerpc__) || defined(__ppc__)
 #define PSQ_L_U8_TO(dst, p) asm volatile("psq_l %0,0(%1),1,2" : "=f"(dst) : "b"(p) : "memory")
+#else
+#define PSQ_L_U8_TO(dst, p) ((dst) = (f32)(*(const u8*)(p)))
+#endif
 
 // Bump texture (I8, 8x4 tiles) index of grid point (x, y). x/8 before y/4 (the two signed divisions are
 // separate blocks, so their order is the source order) and `(y / 4) << 5`: with `* 32` fold would
@@ -332,7 +336,7 @@ void Espgen45_Move00(cEspgen* pGen)
                     // COMPILER-DIFF: candidate #17 (r0 occupant): `j / 8` pinned to r0 = a hard-register conflict of the i
                     // copy `t_i` with r0 during the i-division blocks, so global.c's preference override skips r0 and t_i
                     // takes r9 (the target's `mr r9,i`); jq's shift then inherits r0 (`slwi r0,r0,5`).
-                    register int jq asm("r0") = j / 8;
+                    register int jq = j / 8;
                     jx = (i / 4) << 5;
                     mx = p->Width;
                     // COMPILER-DIFF: candidate (sched1 slot fillers). Three codeless frame stores of `v` (dead after the
@@ -454,7 +458,9 @@ void Espgen45_TransSub(cEspgen* w)
     GXSetCullMode(0);
     GXSetZMode(1, 3, 1);
     cModel model;
+#if defined(__powerpc__) && !defined(TARGET_PC)
     u8 modelPad[0x320 - sizeof(cModel)];
+#endif
     PSMTXIdentity(model.mat);
     {
         static const Vec p0 = {0.0f, 0.0f, 0.0f};
@@ -1139,4 +1145,6 @@ void Estgen45SetParam(ESP4C_WK* pFree)
     StaFlagOn(pG, STA_ESPGEN45_SET);
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

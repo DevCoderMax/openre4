@@ -51,7 +51,7 @@ u32 upDownCk(cPlayer* pl);
 
 // Partner (id 3) dead while the player is in routine 0: routine 6 (die), damage info 0x80. An
 // inline member of the class whose vtable this unit owns: emitted here after the destructor.
-inline void cPlayer::subCharLiveCheck()
+void cPlayer::subCharLiveCheck()
 {
     cEm* sub = pSUB;
     if (sub && sub->id == 3 && sub->hp <= 0 && r_no_0 == 0) {
@@ -1076,7 +1076,7 @@ void cPlayer::beginEvent(u32 flag)
         MotionBlendOff(this);
         atari.off();
         be_flag |= 0x04000000;
-        if (Wep->m_pWep) {
+        if (Wep->m_pWep && *(void**)Wep->m_pWep != nullptr) {
             Wep->m_pWep->resetMotion();
         }
         setFootwork();
@@ -1101,8 +1101,8 @@ void cPlayer::interrupt()
     stat.off(F_CROUCH);
     ang.y += pList->ang.y;
     pList->ang.y = 0.0f;
-    if (Wep->m_pWep) {
-        if (Wep->m_pWepHand) {
+    if (Wep->m_pWep && *(void**)Wep->m_pWep != nullptr) {
+        if (Wep->m_pWepHand && *(void**)Wep->m_pWepHand != nullptr) {
             Wep->m_pWepHand->setDisp(1, 1);
         }
         Wep->m_pWep->interrupt();
@@ -1229,7 +1229,7 @@ void cPlayer::beginAction()
     endCamera();
     setRno(5, 0, 0, 0);
     MotionBlendOff(this);
-    if (Wep->m_pWep) {
+    if (Wep->m_pWep && *(void**)Wep->m_pWep != nullptr) {
         Wep->m_pWep->resetMotion();
     }
     setFootwork();
@@ -1487,6 +1487,7 @@ int cPlayer::keyReload()
 cPlNeck::cPlNeck(cPlayer* p)
 {
     pl = p;
+    m_pLastTarget = 0;
     m_NeckY = 0.0f;
     m_lockCtr = 0;
     m_MotR = 0;
@@ -1552,7 +1553,7 @@ void cPlNeck::move()
     if (pPL->r_no_0 != 0 || pPL->r_no_1 > 3) {
         m_lockCtr = 0;
     }
-    if (m_lockCtr) {
+    if (m_lockCtr && m_pLastTarget) {
         f32 a = GetXZAngleLocal(&head->world, &m_pLastTarget->pos, pPL->ang.y);
         if (a > m_NeckY) {
             if (a - m_NeckY > 0.10471975803375244f) {
@@ -1694,7 +1695,7 @@ void cMot3::set(cModel* m, void* m0, void* m1, void* m2, void* seq, u8 b, int c,
     // any mask written on `b`. Reading the incoming register through a pin gives the
     // zero_extendqisi2 no LOG_LINK to fold through (and no CC clobber: sched1 weight 0, so it
     // is ranked like the original's insn).
-    register int rb asm("r9");
+    register int rb;
     int mode = (u8) rb;
 
     m_pEm = m;

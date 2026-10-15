@@ -65,8 +65,14 @@ struct TITLE_WORK {
 struct TitleArc {
     u32 ofs[0x10];
 };
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+#define TITLE_ARC_PTR(arc, no) ((void*) ((u8*)(arc) + __builtin_bswap32(((TitleArc*)(arc))->ofs[no])))
+#else
 #define TITLE_ARC_PTR(arc, no) ((void*) ((arc)->ofs[no] + (u32) (arc)))
+#endif
 
 void Title_task();
+
+extern bool g_autoStartVillage;
 
 #endif

@@ -27,7 +27,7 @@ struct FREE_OBJ26 {
 // then shrinks/fades away (routine 1). Routine index in xFD, step in xFE.
 class cObj26 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ26
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ26
 
     virtual void move();
 };

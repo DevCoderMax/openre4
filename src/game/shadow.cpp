@@ -23,6 +23,8 @@
 #include "trans.h"
 #include "player.h"
 #include "pl_npc.h"
+#include <cstdio>
+#include <cstdlib>
 
 // game/trans.cpp; uninitialised there, so not in trans.h (a header extern reorders trans.cpp's .bss)
 extern GXTexObj IndTex[2];
@@ -58,7 +60,7 @@ static inline u8 LightInfoShape(cLightInfo* li) { return li->Flag; }
         cLightInfo* li = &(m)->LightInfo;                                           \
         if (li->PartsNo > 0) {                                                          \
             cCoord* p = (m)->getPartsPtr(li->PartsNo - 1);                              \
-            if ((u32) p < 0x80000000 || (u32) p > 0x82FFFFFF) {                     \
+            if (!VALID_PTR(p)) {                                                        \
                 pLog->err(0, 0, msg, LightInfoParts(&(m)->LightInfo));              \
                 p = (m);                                                            \
             }                                                                       \
@@ -102,12 +104,26 @@ ShadowMng* GetSelfShadowMng(int no)
 
 // Room start: creates the shadow receiver objects (cObj kind 3, drawn only into the shadow pass:
 // be_flag 0x80 set, 2 clear) from the room's SHD placement file (version <= 0x41; model table
+#if defined(OPENRE4_NATIVE)
+static inline void swap_shd_float(f32* f) {
+    u32* u = (u32*) f;
+    *u = __builtin_bswap32(*u);
+}
+#endif
+
+// Room start: creates the shadow receiver objects (cObj kind 3, drawn only into the shadow pass:
+// be_flag 0x80 set, 2 clear) from the room's SHD placement file (version <= 0x41; model table
 // with the core archive's TPL). Returns their number.
 int ShdInit(ShdHeader* data)
 {
     u32* ofsTbl;
     ShdEntry* e;
     int i;
+
+    printf("[OpenRE4 Debug] ShdInit: data=%p, raw_version=0x%x, raw_num=0x%x, raw_tblOfs=0x%x, CurHeap=%d, handle=%d\n",
+           data, data ? data->version : 0, data ? data->num : 0, data ? data->tblOfs : 0,
+           MemGetCurrentHeap(), data ? Heap[MemGetCurrentHeap()].handle : -1);
+    fflush(stdout);
 
     if (data == 0) {
         g_objNum = 0;
@@ -118,12 +134,49 @@ int ShdInit(ShdHeader* data)
         pLog->err(0, 0, "ShdInit() INVALID VERSION[%x]", data->version);
         return 0;
     }
+
+#if defined(OPENRE4_NATIVE)
+    u32* magic = (u32*) &data->pad_8[0];
+    if (*magic != 0x53484450) { // 'SHDP'
+        data->num = __builtin_bswap16(data->num);
+        data->tblOfs = __builtin_bswap32(data->tblOfs);
+        ofsTbl = (u32*) ((u8*) data + data->tblOfs);
+        int max_model = 0;
+        for (i = 0; i < data->num; i++) {
+            ShdEntry* entry = &data->entry[i];
+            swap_shd_float(&entry->pos.x);
+            swap_shd_float(&entry->pos.y);
+            swap_shd_float(&entry->pos.z);
+            swap_shd_float(&entry->rot.x);
+            swap_shd_float(&entry->rot.y);
+            swap_shd_float(&entry->rot.z);
+            swap_shd_float(&entry->scale.x);
+            swap_shd_float(&entry->scale.y);
+            swap_shd_float(&entry->scale.z);
+            if (entry->model > max_model) {
+                max_model = entry->model;
+            }
+        }
+        for (int k = 0; k <= max_model; k++) {
+            ofsTbl[k] = __builtin_bswap32(ofsTbl[k]);
+        }
+        *magic = 0x53484450;
+    }
+#endif
+
     g_objNum = data->num;
 #line 185 "D:/Bio4/Prog/shadow.cpp"
-    g_objTbl = (cObj**) MEM_CALLOC(g_objNum * 4, 1, 13);
+    g_objTbl = (cObj**) MEM_CALLOC(g_objNum * sizeof(cObj*), 1, 13);
+#if defined(OPENRE4_NATIVE)
+    if (!g_objTbl && g_objNum > 0) {
+        printf("[OpenRE4 Debug] ShdInit: MEM_CALLOC failed, using calloc fallback for %d entries\n", g_objNum);
+        fflush(stdout);
+        g_objTbl = (cObj**) calloc(g_objNum, sizeof(cObj*));
+    }
+#endif
     ofsTbl = (u32*) ((u8*) data + data->tblOfs);
-    e = data->entry;
     for (i = 0; i < data->num; i++) {
+        e = &data->entry[i];
         cObj* obj = ObjMgr.create();
         if (obj == 0) {
             continue;
@@ -143,7 +196,6 @@ int ShdInit(ShdHeader* data)
         obj->pos = e->pos;
         obj->ang = e->rot;
         obj->scale = e->scale;
-        e++;
         {
             cBoundingBox* bound = &obj->pModelInfo->bound;
             Vec size;
@@ -154,7 +206,9 @@ int ShdInit(ShdHeader* data)
         }
         obj->matUpdate();
         obj->LightInfo.updateMatrix(obj);
-        g_objTbl[i] = obj;
+        if (g_objTbl) {
+            g_objTbl[i] = obj;
+        }
     }
     return data->num;
 }
@@ -697,7 +751,7 @@ void make_comn_fit_light(ShadowMng* mng, cModel* m)
     {
         // COMPILER-DIFF: 13 (local-alloc qty order): r11 pinned after the 1.0 load and before the
         // conversion's lfd, so the fpmem loadaddr cannot take r11 and the 1.0 pool high gets it.
-        register u32 k asm("r11");
+        register u32 k;
         asm("" : "=r"(k) : "f"(1.0f));
         asm("" : "=m"(pos.x) : "r"(k));
         if (mng->fov < 1.0f) {
@@ -772,7 +826,7 @@ void make_comn_parallel_light(ShadowMng* mng, cModel* m)
     mng->fov -= w->Fovy_sub;
     {
         // COMPILER-DIFF: 13 (local-alloc qty order): see make_comn_fit_light.
-        register u32 k asm("r11");
+        register u32 k;
         asm("" : "=r"(k) : "f"(1.0f));
         asm("" : "=m"(pos.x) : "r"(k));
         if (mng->fov < 1.0f) {
@@ -1183,7 +1237,7 @@ int shadowChkInFrustum(ShadowMng* mng, cModel* m)
     }
     if (li->PartsNo > 0) {
         cCoord* p = m->getPartsPtr(li->PartsNo - 1);
-        if ((u32) p < 0x80000000 || (u32) p > 0x82FFFFFF) {
+        if (!VALID_PTR(p)) {
             pLog->err(0, 0, "shadowChkInFrustum() cCoord NO ERR %d", li->PartsNo);
             p = m;
         }

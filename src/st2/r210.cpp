@@ -598,4 +598,6 @@ static void plemRide(cPlayer* pl)
 }
 
 // The module's .data continues 8-aligned.
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

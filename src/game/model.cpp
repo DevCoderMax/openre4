@@ -265,7 +265,7 @@ inline void cModel::setNoSuspend(int onoff)
 }
 
 // 1 when the model is drawn (be_flag bit 1).
-inline int cModel::isTrans()
+int cModel::isTrans()
 {
     int ret = 0;
 
@@ -277,7 +277,7 @@ inline int cModel::isTrans()
 
 // Parts `no` (-1: the model itself); NULL and a log when the chain is shorter. Defined here so
 // that the callers below inline it while setPartsParent above calls it.
-inline cParts* cModel::getPartsPtr(int idx)
+cParts* cModel::getPartsPtr(int idx)
 {
     cParts* p = pList;
     int cnt;
@@ -325,7 +325,7 @@ void cModel::matBlend(f32 rate)
         // and copies it (`addi r0,r31,60; mr r28,r0`). With the temp pinned to r0 and kept live
         // past the copy by the codeless anchor below (before the PSVECMag call), combine cannot
         // fold the copy into the addi (the r0 set is still needed) and regmove skips hard registers.
-        register MtxPtr t asm("r0") = p->l_mat;
+        register MtxPtr t = p->l_mat;
         MtxPtr wm = t;
 
         vx.x = p->l_mat[0][0];
@@ -929,29 +929,109 @@ void cModel::moveDataAddr(int ofsAddr)
 // Relocates the file offsets of a model bin to pointers (once: pClr is a pointer afterwards).
 void calcModelAddr(cModelData* d)
 {
+    if (d == NULL) return;
+
     u8* base = (u8*) d;
 
-    if ((int) d->pClr < 0) {
+    // Check if already relocated
+    if (IS_MEM1_PTR((uintptr_t)d->pHead) && 
+        (d->version == 0x20010801 || d->version == 0x20030818 || d->version == 0x20030817)) {
         return;
     }
-    d->pClr = base + (u32) d->pClr;
-    d->pTex = base + (u32) d->pTex;
-    d->pHead = (ModelDataHead*) (base + (u32) d->pHead);
-    d->pWeight = base + (u32) d->pWeight;
-    d->pParts = (cPolyHeader*) (base + (u32) d->pParts);
-    d->vtxOrig = base + (u32) d->vtxOrig;
-    d->nrmOrig = base + (u32) d->nrmOrig;
-    if (d->version > 0x20030817) {
-        if (d->blendTbl != 0) {
-            d->blendTbl = (u32) base + d->blendTbl;
-        }
-        if (d->flipTbl != 0) {
-            d->flipTbl = (u32) base + d->flipTbl;
-        }
+
+    bool is_big_endian = (d->version == 0x01080120 || d->version == 0x18080320 || d->version == 0x17080320);
+    if (!is_big_endian && !(d->version == 0x20010801 || d->version == 0x20030818 || d->version == 0x20030817)) {
+        printf("[OpenRE4 Debug] calcModelAddr: unknown version 0x%08X (raw) at %p\n", d->version, d);
+        fflush(stdout);
+        return;
     }
-    if ((u32) d->pParts & 0x1F) {
-#line 1907 "D:/Bio4/Prog/model.cpp"
-        HALT();
+
+    u32 headOfs = (u32)(uintptr_t) d->pHead;
+    u32 clrOfs = (u32)(uintptr_t) d->pClr;
+    u32 texOfs = (u32)(uintptr_t) d->pTex;
+    u32 weightOfs = (u32)(uintptr_t) d->pWeight;
+    u32 partsOfs = (u32)(uintptr_t) d->pParts;
+    u32 vtxOfs = (u32)(uintptr_t) d->vtxOrig;
+    u32 nrmOfs = (u32)(uintptr_t) d->nrmOrig;
+    u32 shapeOfs = d->shapeOfs;
+    u32 blendOfs = d->blendTbl;
+    u32 flipOfs = d->flipTbl;
+
+    if (is_big_endian) {
+        d->version = __builtin_bswap32(d->version);
+        d->flags = __builtin_bswap32(d->flags);
+        d->nTex = __builtin_bswap32(d->nTex);
+        d->displist_num = __builtin_bswap16(d->displist_num);
+        d->weight_ext_num = __builtin_bswap16(d->weight_ext_num);
+        d->nVtx = __builtin_bswap16(d->nVtx);
+        d->nNrm = __builtin_bswap16(d->nNrm);
+
+        headOfs = __builtin_bswap32(headOfs);
+        clrOfs = __builtin_bswap32(clrOfs);
+        texOfs = __builtin_bswap32(texOfs);
+        weightOfs = __builtin_bswap32(weightOfs);
+        partsOfs = __builtin_bswap32(partsOfs);
+        vtxOfs = __builtin_bswap32(vtxOfs);
+        nrmOfs = __builtin_bswap32(nrmOfs);
+        shapeOfs = shapeOfs ? __builtin_bswap32(shapeOfs) : 0;
+        blendOfs = blendOfs ? __builtin_bswap32(blendOfs) : 0;
+        flipOfs = flipOfs ? __builtin_bswap32(flipOfs) : 0;
+    }
+
+    d->pHead = headOfs ? (ModelDataHead*)(base + headOfs) : NULL;
+    d->pClr = clrOfs ? (void*)(base + clrOfs) : NULL;
+    d->pTex = texOfs ? (void*)(base + texOfs) : NULL;
+    d->pWeight = weightOfs ? (void*)(base + weightOfs) : NULL;
+    d->pParts = partsOfs ? (cPolyHeader*)(base + partsOfs) : NULL;
+    d->vtxOrig = vtxOfs ? (void*)(base + vtxOfs) : NULL;
+    d->nrmOrig = nrmOfs ? (void*)(base + nrmOfs) : NULL;
+    d->shapeOfs = shapeOfs;
+    if (d->version > 0x20030817) {
+        d->blendTbl = blendOfs ? (u32)(uintptr_t)(base + blendOfs) : 0;
+        d->flipTbl = flipOfs ? (u32)(uintptr_t)(base + flipOfs) : 0;
+    }
+
+    if (is_big_endian) {
+        if (d->pHead != NULL) {
+            ModelDataHead* rec = (ModelDataHead*) d->pHead;
+            for (u32 i = 0; i < (u32)d->nParts; i++) {
+                u32* px = (u32*) &rec[i].center.x;
+                u32* py = (u32*) &rec[i].center.y;
+                u32* pz = (u32*) &rec[i].center.z;
+                *px = __builtin_bswap32(*px);
+                *py = __builtin_bswap32(*py);
+                *pz = __builtin_bswap32(*pz);
+            }
+        }
+        if (d->pParts != NULL) {
+            cPolyHeader* part = (cPolyHeader*) d->pParts;
+            for (u32 i = 0; i < d->displist_num; i++) {
+                part->buff_size = __builtin_bswap32(part->buff_size);
+                part->nPoly = __builtin_bswap32(part->nPoly);
+                u8* next = (u8*)(part + 1);
+                part = (cPolyHeader*)(next + part->buff_size);
+            }
+        }
+        if (d->version > 0x20030817 && d->blendTbl != 0) {
+            u8* pBt = (u8*)(uintptr_t) d->blendTbl;
+            s32* pCount = (s32*) pBt;
+            *pCount = (s32) __builtin_bswap32((u32) *pCount);
+            s32 count = *pCount;
+            u16* entries = (u16*)(pBt + 4);
+            for (s32 i = 0; i < count * 4; i++) {
+                entries[i] = __builtin_bswap16(entries[i]);
+            }
+        }
+        if (d->version > 0x20030817 && d->flipTbl != 0) {
+            u8* pFt = (u8*)(uintptr_t) d->flipTbl;
+            u32* pCount = (u32*) pFt;
+            *pCount = __builtin_bswap32(*pCount);
+            u32 count = *pCount;
+            u16* entries = (u16*)(pFt + 4);
+            for (u32 i = 0; i < count; i++) {
+                entries[i] = __builtin_bswap16(entries[i]);
+            }
+        }
     }
 }
 
@@ -1008,6 +1088,9 @@ void slideModelAddr(u32 addr, int ofs)
 // Converts a TPL's descriptor/texture header/image offsets to pointers, once.
 void calcTplAddr(TEXPalette* tpl)
 {
+#if defined(OPENRE4_NATIVE)
+    UnpackTplNative(tpl);
+#else
     u32 i;
 
     if (tpl == NULL) {
@@ -1026,6 +1109,7 @@ void calcTplAddr(TEXPalette* tpl)
             }
         }
     }
+#endif
 }
 
 // Inverse of calcTplAddr.
@@ -1211,9 +1295,9 @@ void getBoundingBox(cModelData* d, cBoundingBox* pBox)
         f32 sc = (f32) (1 << shift);
         i = n;
         do {
-            f32 x = (f32) v[0] / sc;
-            f32 y = (f32) v[1] / sc;
-            f32 z = (f32) v[2] / sc;
+            f32 x = (f32) (s16) __builtin_bswap16((u16) v[0]) / sc;
+            f32 y = (f32) (s16) __builtin_bswap16((u16) v[1]) / sc;
+            f32 z = (f32) (s16) __builtin_bswap16((u16) v[2]) / sc;
             if (maxX < x) {
                 maxX = x;
             }

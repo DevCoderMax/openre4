@@ -48,6 +48,43 @@ struct IdTexData {
 // table) under owner `id`; texture id 0x80 skips the duplicate check. Returns 0 on a bad version.
 int IdTexDataLoad(void* data, int id)
 {
+    if (!data) {
+        return 0;
+    }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    u8* base = (u8*) data;
+    IdTexData* d = (IdTexData*) base;
+    u32 ver = d->version;
+    bool is_be = (ver == 0x0B000000);
+    if (is_be) {
+        ver = __builtin_bswap32(ver);
+    }
+    if (ver != 0xB) {
+        pLog->err(0, 0, "IdDataLoad():EffData [0x%p] Invalid version 0x%x.", data, d->version);
+        return 0;
+    }
+    u32 ofsId = is_be ? __builtin_bswap32(d->ofsId) : d->ofsId;
+    u32 ofsTpl = is_be ? __builtin_bswap32(d->ofsTpl) : d->ofsTpl;
+    u32 ofsAnm = is_be ? __builtin_bswap32(d->ofsAnm) : d->ofsAnm;
+
+    TexIdTbl* idTbl = (TexIdTbl*) (base + ofsId);
+    TexOfsTbl* tplTbl = (TexOfsTbl*) (base + ofsTpl);
+    TexOfsTbl* anmTbl = (TexOfsTbl*) (base + ofsAnm);
+
+    u32 num = is_be ? __builtin_bswap32(idTbl->num) : idTbl->num;
+    for (u32 i = 0; i < num; i++) {
+        u32 t_ofs = is_be ? __builtin_bswap32(tplTbl->ofs[i]) : tplTbl->ofs[i];
+        u32 a_ofs = is_be ? __builtin_bswap32(anmTbl->ofs[i]) : anmTbl->ofs[i];
+        TEXPalette* tpl = (TEXPalette*) ((u8*) tplTbl + t_ofs);
+        TexAnm* anm = (TexAnm*) ((u8*) anmTbl + a_ofs);
+        u16 entId = is_be ? __builtin_bswap16(idTbl->ent[i].id) : idTbl->ent[i].id;
+        u8 texId = (u8) entId;
+        int check = (texId == 0x80) ? 0 : 1;
+
+        g_pIdTexSys->TexRegist(tpl, anm, texId, id, 0, check);
+    }
+    return 1;
+#else
     u32 addr = (u32) data;
     IdTexData* d;
     TexIdTbl* idTbl;
@@ -78,6 +115,7 @@ int IdTexDataLoad(void* data, int id)
         g_pIdTexSys->TexRegist(tpl, anm, texId, id, 0, check);
     }
     return 1;
+#endif
 }
 
 

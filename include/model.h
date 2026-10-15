@@ -95,23 +95,23 @@ struct ModelDataHead {
 
 // Model data referenced by a bin (game/model.cpp `cModelData`); only the flag word is known.
 struct cModelData {
-    ModelDataHead* pHead;  // 0x00
+    Ptr32<ModelDataHead> pHead;  // 0x00
     u8 pad_4[0xC - 0x4];
-    void* pClr;      // 0x0C  vertex colour array (GX_VA_CLR0, RGBA8; used when flags bit31 is set)
-    void* pTex;      // 0x10  texture coordinate array (GX_VA_TEX0)
-    void* pWeight;   // 0x14  skinning weights (trans MakeWeightPalette: Weight[x18] or cWeightExt[x2A])
+    Ptr32<void> pClr;      // 0x0C  vertex colour array (GX_VA_CLR0, RGBA8; used when flags bit31 is set)
+    Ptr32<void> pTex;      // 0x10  texture coordinate array (GX_VA_TEX0)
+    Ptr32<void> pWeight;   // 0x14  skinning weights (trans MakeWeightPalette: Weight[x18] or cWeightExt[x2A])
     u8 weight_palette_num;  // 0x18  cWeight entries of pWeight (trans MakeWeightPalette); <= 1 with nParts == 1: rigid, original arrays
     u8 nParts;       // 0x19  parts count (cModel::setModel copies it into cModel::nParts)
     u16 displist_num;  // 0x1A  primitive (display list) part count (dbmodule DrawObjWireframe)
-    struct cPolyHeader* pParts;  // 0x1C  first part header (0x20 bytes + primitive stream)
+    Ptr32<struct cPolyHeader> pParts;  // 0x1C  first part header (0x20 bytes + primitive stream)
     u32 flags;       // 0x20  bit31: s16 tex coords (frac 8), bit30 (0x40000000): SmxGetFlag bit1, bit29: s8 normals
     u32 nTex;        // 0x24  texture count (trans: must be <= 0xF7)
     u8 shift;        // 0x28  vertex fixed-point shift (dbmodule: scale = 1 / (1 << shift))
     u8 pad_29;
     u16 weight_ext_num;  // 0x2A  extended weight entries (> 0xFF: pWeight is a cWeightExt table)
     u32 shapeOfs;    // 0x2C  offset of the shape (vertex delta) table (shape.cpp)
-    void* vtxOrig;   // 0x30  original vertex positions (shape.cpp ResetShape source)
-    void* nrmOrig;   // 0x34  original vertex normals
+    Ptr32<void> vtxOrig;   // 0x30  original vertex positions (shape.cpp ResetShape source)
+    Ptr32<void> nrmOrig;   // 0x34  original vertex normals
     u16 nVtx;        // 0x38  vertex count (8 bytes each)
     u16 nNrm;        // 0x3A  normal count
     u32 version;     // 0x3C  0x20010801 / 0x20030817 / 0x20030818 (model.cpp: the two tables below exist from 0x20030818)

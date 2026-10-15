@@ -55,6 +55,15 @@ struct AREA_HIT_DATA {
     };
 };
 
+static inline void AreaHitDataConvertEndian(AREA_HIT_DATA* a) {
+    if (!a) return;
+    a->pad = __builtin_bswap16(a->pad);
+    u32* flts = (u32*) &a->xz4;
+    for (int k = 0; k < 11; k++) {
+        flts[k] = __builtin_bswap32(flts[k]);
+    }
+}
+
 struct GEOM_CONE_REV;
 
 BOOL AreaHitCheck(AREA_HIT_DATA* pAre, Vec* pPos);

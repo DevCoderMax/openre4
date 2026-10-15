@@ -445,7 +445,11 @@ int GetWaterCrossPos(Vec* pos, Vec* dir, Vec* Ret)
 // u8 to f32 through GQR2 from a stack byte. The volatile asm is a scheduling barrier that orders the
 // address adds and neighbour loads as in the target's loop A. The same definition is in trans.cpp,
 // and the asm stays in this unit so asmcheck.py counts it.
+#if defined(__powerpc__) || defined(__ppc__)
 #define PSQ_L_U8_TO(dst, p) asm volatile("psq_l %0,0(%1),1,2" : "=f"(dst) : "b"(p) : "memory")
+#else
+#define PSQ_L_U8_TO(dst, p) ((dst) = (f32)(*(const u8*)(p)))
+#endif
 
 // Step 0, every frame: the wave simulation, which also sets Status_flg[0] 0x200 (water present).
 // Mode 1 is a cheaper single-pass variant, and in the effect tool the B button drops the surface.
@@ -652,7 +656,7 @@ void Espgen42_Move00(cEspgen* pGen)
                     // COMPILER-DIFF: candidate #17 (r0 occupant): `j / 8` pinned to r0 = a hard-register conflict of the i
                     // copy `t_i` with r0 during the i-division blocks, so global.c's preference override skips r0 and t_i
                     // takes r9 (the target's `mr r9,i`); jq's shift then inherits r0 (`slwi r0,r0,5`).
-                    register int jq asm("r0") = j / 8;
+                    register int jq = j / 8;
                     jx = (i / 4) << 5;
                     mx = p->Width;
                     // COMPILER-DIFF: candidate (sched1 slot fillers). Three codeless frame stores of `v` (dead after the
@@ -740,7 +744,9 @@ void Espgen42_TransSub(cEspgen* pGen)
     GXSetCullMode(0);
     GXSetZMode(1, 3, 1);
     cModel model;
+#if defined(__powerpc__) && !defined(TARGET_PC)
     u8 modelPad[0x320 - sizeof(cModel)];
+#endif
     PSMTXIdentity(model.mat);
     {
         static const Vec p0 = {0.0f, 0.0f, 0.0f};
@@ -1204,4 +1210,6 @@ int Espgen42_SetFreeWork(cEspgen* pGen, cEspSeqTbl* pSeq, cEspSeqHead* pSeqHed, 
     return 0;
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

@@ -49,8 +49,11 @@ void snd_work_clear(void)
     Snd_test_work_clear();
 }
 
-// t_movie/snd_test defines its own static cb_dma_end; the header must not declare this one.
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+void cb_dma_end(uintptr_t task);
+#else
 void cb_dma_end(u32 task);
+#endif
 
 // Uploads 256 zero bytes to the ARAM base (the silent sample every idle voice points at) and
 // waits for the DMA.
@@ -61,7 +64,7 @@ void zero_buff_clear(void)
     memclr_asm(zero_tbl, sizeof(zero_tbl));
     DCFlushRange(zero_tbl, sizeof(zero_tbl));
     ctrl->arq_flag = 1;
-    ARQPostRequest(&ctrl->arq_req, 0, ARQ_TYPE_MRAM_TO_ARAM, ARQ_PRIORITY_HIGH, (u32) zero_tbl, ctrl->zero_adrs,
+    ARQPostRequest(&ctrl->arq_req, 0, ARQ_TYPE_MRAM_TO_ARAM, ARQ_PRIORITY_HIGH, (uintptr_t) zero_tbl, ctrl->zero_adrs,
                    sizeof(zero_tbl), cb_dma_end);
     while (1) {
         if (ctrl->arq_flag == 0) {
@@ -71,7 +74,11 @@ void zero_buff_clear(void)
 }
 
 // ARQ callback: the zero-table upload finished.
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+void cb_dma_end(uintptr_t task)
+#else
 void cb_dma_end(u32 task)
+#endif
 {
     Snd_ctrl_work.arq_flag = 0;
 }

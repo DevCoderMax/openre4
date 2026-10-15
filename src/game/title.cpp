@@ -42,7 +42,7 @@
 #line 62
 
 // stage_prev/room_prev written as one u16 through a plain pointer (aliases pG like G_ROOM_ID).
-#define G_ROOM_ID_PREV (*(u16*) &pG->stage_prev)
+#define G_ROOM_ID_PREV (pG->room_id_prev)
 
 // Core sub-files use CORE_ARC from global.h; title-screen data below has its own archive.
 
@@ -84,6 +84,7 @@ int TTL_CANCEL_WARNING = 45;
 int TTL_CANCEL_CAPCOM = 120;
 int TTL_CANCEL_CRI = 245;
 static int TTL_CANCEL_DOLBY = 345;
+bool g_autoStartVillage = false;
 
 // The title screen task (scheduler slot after boot): allocates the save buffer, item manager, the
 // core / option data, then runs the title state machine (TITLE_WORK Rno0) every frame until
@@ -176,7 +177,7 @@ void titleWait(TITLE_WORK* w)
             IdSys.roomInit();
             IdTexDataLoad(TITLE_ARC_PTR(w->pIdDat, 4), TEX_OWNER_ID_TITLE);
             {
-                register u8 z asm("r11");  // COMPILER-DIFF: #13 (REG_EQUIV zero reloaded into r11)
+                register u8 z;  // COMPILER-DIFF: #13 (REG_EQUIV zero reloaded into r11)
                 z = 0;
                 w->Rno0 = 2;
                 w->sndFlag = 1;
@@ -559,6 +560,18 @@ void titleMain(TITLE_WORK* w)
         titleMenuInit(w);
         w->Rno1 = 1;
         demo_loop_cnt = 600;
+        if (g_autoStartVillage) {
+            printf("[OpenRE4 Core] Auto-start Village ativo! Iniciando transição direta para Pueblo (r100)...\n");
+            pG->stage_no = 1;
+            pG->room_no = 0;
+            pG->JumpPoint = 0;
+            pG->game_mode = 5;
+            w->Stage = 1;
+            w->JumpPoint = 0;
+            w->Rno0 = 7;
+            w->Rno1 = 0;
+            return;
+        }
         break;
     case 1: {
         int sel = titleMenuSelect(w);
@@ -1354,6 +1367,14 @@ void titleExit(TITLE_WORK* w)
     if (!SysFlagChk(pG, SYS_LOAD_GAME)) {
         if (!SysFlagChk(pG, SYS_OMAKE_ADA_GAME)) {
             if (!SysFlagChk(pG, SYS_OMAKE_ETC_GAME)) {
+                if (g_autoStartVillage) {
+                    pG->stage_no = 1;
+                    pG->room_no = 0;
+                    pG->room_id = 0x100;
+                    pG->JumpPoint = 0;
+                    w->Stage = 1;
+                    w->JumpPoint = 0;
+                }
                 pRj = new cRoomJmp(roomInfoAddr);
                 w->Stage = pG->stage_no;
                 w->Room[w->Stage] = pRj->getRoomIdx(pG->stage_no, pG->room_no);
@@ -1363,11 +1384,17 @@ void titleExit(TITLE_WORK* w)
                 w->menu_x = 340;
                 w->menu_y = 60;
                 w->se_id = 0;
-                while (!(Joy[0].trg & 0x1100)) {
-                    titleDebugMenu(w);
-                    TaskSleep(1);
+                if (!g_autoStartVillage) {
+                    while (!(Joy[0].trg & 0x1100)) {
+                        titleDebugMenu(w);
+                        TaskSleep(1);
+                    }
                 }
                 G_ROOM_ID = pRj->getRoomInfo(w->Stage, w->Room[w->Stage] + w->JumpPoint)->roomNo;
+                if (g_autoStartVillage) {
+                    G_ROOM_ID = 0x100;
+                    pG->room_id = 0x100;
+                }
                 pG->JumpPoint = w->JumpPoint;
                 pG->em_list_no = w->em_list_no;
                 if (pG->em_list_no > 3) {

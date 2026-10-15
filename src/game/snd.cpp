@@ -1,6 +1,7 @@
 // game/snd: game-side sound interface (D:/Bio4/Prog/snd.cpp, -O2) that calls into the C sound
 // driver (src/game/snd_*.cpp, include/snd_drv.h).
 #include "types.h"
+#include <cstdio>
 #include "global.h"
 #include "map_obj.h"
 #include "light.h"
@@ -93,7 +94,12 @@ void SndInit()
     str_flag = Dvd.ReadCheck(r, &len, 0, 0) > 0;
     adr = SND_DATA_TOP + ALIGN32(len);
     for (i = 0; i < 2; i++) {
-        SndMem.str_file[i] = (SndStrFile*) (SND_DATA_TOP + ((u32*) SND_DATA_TOP)[i]);
+#if defined(OPENRE4_NATIVE)
+        u32 ofs = __builtin_bswap32(((u32*) SND_DATA_TOP)[i]);
+#else
+        u32 ofs = ((u32*) SND_DATA_TOP)[i];
+#endif
+        SndMem.str_file[i] = (SndStrFile*) (SND_DATA_TOP + ofs);
         Snd_str_blk_init(i, SndMem.str_file[i]);
     }
 
@@ -121,11 +127,19 @@ void SndInit()
     SndMem.blk_mram[2] = SndMem.blk_mram[1] + 0x4000;
     SndMem.blk_mram[7] = SndMem.blk_mram[2] + 0x4000;
     SndMem.mram_end = SndMem.blk_mram[7] + 0x4000;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    uintptr_t adr_u = (uintptr_t) SndMem.mram_end;
+    for (i = 3; i >= 0; i--) {
+        SndMem.str_buf[i] = adr_u + 0x10000 + i * 0x8000;
+    }
+    SndMem.sub_adr = SndMem.str_buf[3] + 0x8000;
+#else
     adr = (u32) SndMem.mram_end;
     for (i = 3; i >= 0; i--) {
         SndMem.str_buf[i] = adr + 0x10000 + i * 0x8000;
     }
     SndMem.sub_adr = SndMem.str_buf[3] + 0x8000;
+#endif
 #line 170 SND_FILE
     r = DvdRead(0x59, (void*) SndMem.sub_adr, 0, 0, 0, 0x8001, __FILE__, __LINE__);
     Dvd.ReadCheck(r, &len, 0, 0);
@@ -163,6 +177,29 @@ void SndInit2()
 void SndBgmTblInit()
 {
     SndBgmTbl* t = SndMem.bgm_tbl;
+#if defined(OPENRE4_NATIVE)
+    u32 list_ofs = __builtin_bswap32(t->list_ofs);
+    u32 room_ofs_base = __builtin_bswap32(t->room_ofs);
+    u16* rl = (u16*) ((u8*) t + list_ofs);
+    int i = 0;
+    int j;
+
+    while (__builtin_bswap16(*rl) != 0xFFFF) {
+        u16 r_id = __builtin_bswap16(*rl);
+        ROOM_SAVE_DATA* rs = (ROOM_SAVE_DATA*) RoomData.getRoomSavePtr(r_id);
+        if (rs != NULL) {
+            u32* ofs = (u32*) ((u8*) SndMem.bgm_tbl + room_ofs_base);
+            u32 r_ofs = __builtin_bswap32(ofs[i]);
+            SndBgmRoom* room = (SndBgmRoom*) ((u8*) ofs + r_ofs);
+            for (j = 0; j < 6; j++) {
+                rs->BgmTable[j] = __builtin_bswap32(room->e[0].bgm[j]);
+                rs->StrTable[j] = __builtin_bswap32(room->e[0].str[j]);
+            }
+        }
+        rl++;
+        i++;
+    }
+#else
     u16* rl = (u16*) ((u8*) t + t->list_ofs);
     int i = 0;
     int j;
@@ -180,6 +217,7 @@ void SndBgmTblInit()
         rl++;
         i++;
     }
+#endif
 }
 
 // Starts the sound driver: reverb hooks, master volumes (SE / BGM / stream, both output types) to
@@ -1602,25 +1640,96 @@ int SndRoomStartInit()
     if (pSnd->hdr == NULL) {
         pSnd->hdr = &DefEffTbl;
     }
+    printf("[OpenRE4 Debug] SndRoomStartInit: pSnd->hdr=%p (DefEffTbl=%p)\n", pSnd->hdr, &DefEffTbl);
+    fflush(stdout);
+#if defined(OPENRE4_NATIVE)
+    if (pSnd->hdr != NULL && pSnd->hdr != &DefEffTbl) {
+        // Check if byte swap is needed: inspect first non-zero offset
+        bool needs_swap = false;
+        for (i = 0; i < 32; i++) {
+            if (pSnd->hdr->offset_vol[i] >= 0x10000 || pSnd->hdr->offset_pitch[i] >= 0x10000 ||
+                pSnd->hdr->offset_filter[i] >= 0x10000 || pSnd->hdr->offset_tbl[i] >= 0x10000) {
+                needs_swap = true;
+                break;
+            }
+        }
+        if (needs_swap) {
+            printf("[OpenRE4 Debug] SndRoomStartInit: swapping STB big-endian header\n");
+            // Swap REVERB_INFO
+            REVERB_INFO* r = &pSnd->hdr->dpl2;
+            for (int k = 0; k < 2; k++, r++) {
+                r->Aux_core = __builtin_bswap16(r->Aux_core);
+                r->Aux_enemy = __builtin_bswap16(r->Aux_enemy);
+                r->Aux_weapon = __builtin_bswap16(r->Aux_weapon);
+                r->Aux_room = __builtin_bswap16(r->Aux_room);
+                u32* pd = (u32*) &r->Delay; *pd = __builtin_bswap32(*pd);
+                u32* pt = (u32*) &r->Time; *pt = __builtin_bswap32(*pt);
+                u32* pc = (u32*) &r->Coloration; *pc = __builtin_bswap32(*pc);
+                u32* pda = (u32*) &r->Damping; *pda = __builtin_bswap32(*pda);
+                u32* pm = (u32*) &r->Mix; *pm = __builtin_bswap32(*pm);
+                u32* pct = (u32*) &r->Crosstalk; *pct = __builtin_bswap32(*pct);
+            }
+            for (i = 0; i < 32; i++) {
+                pSnd->hdr->offset_tbl[i] = __builtin_bswap32(pSnd->hdr->offset_tbl[i]);
+                pSnd->hdr->offset_vol[i] = __builtin_bswap32(pSnd->hdr->offset_vol[i]);
+                pSnd->hdr->offset_pitch[i] = __builtin_bswap32(pSnd->hdr->offset_pitch[i]);
+                pSnd->hdr->offset_filter[i] = __builtin_bswap32(pSnd->hdr->offset_filter[i]);
+            }
+        }
+    }
+#endif
     if (pSnd->hdr != NULL) {
         SndSetReverb();
+        u32 visited_vol[32] = {0};
+        int num_visited_vol = 0;
         for (i = 0; i < 32; i++) {
             u32 ofs = pSnd->hdr->offset_vol[i];
             SND_TBL_INFO* t;
-            if (ofs != 0) {
-                u32 j;
-                SND_TBL_DATA* ce;
-                t = (SND_TBL_INFO*) ((u8*) pSnd->hdr + ofs);
-                ce = t->data;
-                for (j = 0; j < t->num; j++, ce++) {
-                    ce->dist *= t->scale;
+            if (ofs != 0 && ofs < 0x20000) {
+                bool already = false;
+                for (int v = 0; v < num_visited_vol; v++) {
+                    if (visited_vol[v] == ofs) { already = true; break; }
+                }
+                if (!already && num_visited_vol < 32) {
+                    visited_vol[num_visited_vol++] = ofs;
+                    u32 j;
+                    SND_TBL_DATA* ce;
+                    t = (SND_TBL_INFO*) ((u8*) pSnd->hdr + ofs);
+#if defined(OPENRE4_NATIVE)
+                    if (pSnd->hdr != &DefEffTbl && t->num >= 0x10000) {
+                        t->num = __builtin_bswap32(t->num);
+                        u32* ps = (u32*) &t->scale; *ps = __builtin_bswap32(*ps);
+                        ce = t->data;
+                        for (j = 0; j < t->num; j++, ce++) {
+                            u32* pdist = (u32*) &ce->dist; *pdist = __builtin_bswap32(*pdist);
+                            ce->flag = __builtin_bswap16(ce->flag);
+                            ce->val = __builtin_bswap16(ce->val);
+                        }
+                    }
+#endif
+                    ce = t->data;
+                    for (j = 0; j < t->num; j++, ce++) {
+                        ce->dist *= t->scale;
+                    }
                 }
             }
             ofs = pSnd->hdr->offset_pitch[i];
-            if (ofs != 0) {
+            if (ofs != 0 && ofs < 0x20000) {
                 u32 j;
                 SndCurveEntS* ce;
                 t = (SND_TBL_INFO*) ((u8*) pSnd->hdr + ofs);
+#if defined(OPENRE4_NATIVE)
+                if (pSnd->hdr != &DefEffTbl && t->num >= 0x10000) {
+                    t->num = __builtin_bswap32(t->num);
+                    u32* ps = (u32*) &t->scale; *ps = __builtin_bswap32(*ps);
+                    ce = (SndCurveEntS*) t->data;
+                    for (j = 0; j < t->num; j++, ce++) {
+                        u32* pdist = (u32*) &ce->dist; *pdist = __builtin_bswap32(*pdist);
+                        ce->x4 = __builtin_bswap16(ce->x4);
+                        ce->val = (s16) __builtin_bswap16((u16) ce->val);
+                    }
+                }
+#endif
                 ce = (SndCurveEntS*) t->data;
                 for (j = 0; j < t->num; j++, ce++) {
                     ce->dist *= t->scale;
@@ -1628,10 +1737,22 @@ int SndRoomStartInit()
                 }
             }
             ofs = pSnd->hdr->offset_filter[i];
-            if (ofs != 0) {
+            if (ofs != 0 && ofs < 0x20000) {
                 u32 j;
                 SND_TBL_DATA* ce;
                 t = (SND_TBL_INFO*) ((u8*) pSnd->hdr + ofs);
+#if defined(OPENRE4_NATIVE)
+                if (pSnd->hdr != &DefEffTbl && t->num >= 0x10000) {
+                    t->num = __builtin_bswap32(t->num);
+                    u32* ps = (u32*) &t->scale; *ps = __builtin_bswap32(*ps);
+                    ce = t->data;
+                    for (j = 0; j < t->num; j++, ce++) {
+                        u32* pdist = (u32*) &ce->dist; *pdist = __builtin_bswap32(*pdist);
+                        ce->flag = __builtin_bswap16(ce->flag);
+                        ce->val = __builtin_bswap16(ce->val);
+                    }
+                }
+#endif
                 ce = t->data;
                 for (j = 0; j < t->num; j++, ce++) {
                     ce->dist *= t->scale;
@@ -2498,11 +2619,19 @@ void SndBlkInit(int type, int id, int no)
         break;
     }
     Snd_iss_blk[blk].pcm_adrs = SndMem.blk_aram[blk];
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    uintptr_t adr_val = (uintptr_t) SndMem.blk_mram[blk];
+    if (blk != 3 && blk != 4) {
+        adr_val += __builtin_bswap32(*(u32*) adr_val);
+    }
+    Snd_iss_blk_init(blk, (void*) adr_val);
+#else
     adr = (u32) SndMem.blk_mram[blk];
     if (blk != 3 && blk != 4) {
         adr += *(u32*) adr;
     }
     Snd_iss_blk_init(blk, (void*) adr);
+#endif
     SND_BIT_SET(pSnd->blk_flag, blk);
 }
 
@@ -2783,4 +2912,6 @@ void SndSeqFadeOutAll_sec(u8 type, int time)
 }
 
 // The split object's .sdata is 8-aligned (0x18 bytes: the u8 flag_bak is followed by 7 bytes of pad).
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

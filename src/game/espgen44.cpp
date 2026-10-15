@@ -73,4 +73,6 @@ int Espgen44_SetFreeWork(cEspgen* pGen, cEspSeqTbl* pSeq, cEspSeqHead* pSeqHed, 
 }
 
 // the split object pads .rodata to 8 bytes
+#ifndef OPENRE4_NATIVE
 asm(".section .rodata; .balign 8");
+#endif

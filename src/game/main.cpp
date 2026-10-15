@@ -112,8 +112,11 @@ s8 system_vcnt;
 static void systemScreenInit();
 
 // Program entry: systemStartInit, then on every soft reset restores the reset-keep block (pRK),
-// starts the title task and runs the frame loop until systemResetCheck sees the next soft reset.
+#if defined(TARGET_PC) || defined(OPENRE4_NATIVE)
+int bio4_main()
+#else
 int main()
+#endif
 {
     int i;
     int j;
@@ -153,59 +156,7 @@ RESTART:
         }
         TaskExec(0, Title_task, 0);
         for (;;) {
-            StopwatchInit();
-            ProcessTickInit();
-            Render_before();
-            ClearOTagR(MainOt, 5);
-            PadRead();
-            DebugControl();
-            Render();
-            ProcessTickGet(4, "RENDER SETUP");
-            SetPrimBuffPtr();
-            ClearOt();
-            pG->Frame_cnt++;
-            TaskScheduler();
-            ProcessTickGet(5, "TaskScheduler");
-            if (!SysFlagChk(pG, SYS_TRANS_STOP) || (StaFlagChk(pG, STA_SUB_SCRN))) {
-                IdSys.move();
-            }
-            if (!SysFlagChk(pG, SYS_TRANS_STOP) || (StaFlagChk(pG, STA_SUB_SCRN))) {
-                IdSys.trans();
-            }
-            if (!SysFlagChk(pG, SYS_TRANS_STOP)) {
-                Trans();
-            }
-            Dvd.Watcher();
-            SndWatcher();
-            ProcessTickGet(5, "SndWatcher");
-            FadeControl(0);
-            cMes.Move();
-            cMes.Trans();
-            CinescoMove();
-            if (!DbgFlagChk(pG, DBG_CINESCO_OFF)) {
-                Draw_cinesco();
-            }
-            FadeControl(1);
-            DrawOTag(&MainOt[4]);
-            if (pG->debug_mode != 7) {
-                pLog->disp();
-            }
-            EprintfFlush();
-            ProcessTickGet(2, "PROCESS CPU");
-            iTaskScheduler();
-            Render_done();
-            Block.checkCommand();
-            DC.check();
-            Block.checkCondition();
-            ProcessTickGet(3, "DRAW REMAIN");
-            while (vsync_cnt < GetSystemVcnt() - 1) {}
-            Render_swap();
-            PPCSync();
-            while (vsync_cnt < GetSystemVcnt()) {}
-            vsync_cnt = 0;
-            systemVSyncPost();
-            SysFlagOff(pG, SYS_RENDER_END);
-            ProcessTickGet(0, "PROCESS TOTAL");
+            bio4_frame();
             ret = systemResetCheck();
             if (ret == 1) {
                 goto RESTART;
@@ -214,6 +165,67 @@ RESTART:
     }
     OSPanic(__FILE__, __LINE__, "End of biohazard4");
     return 0;
+}
+
+void bio4_frame()
+{
+    StopwatchInit();
+    ProcessTickInit();
+    Render_before();
+    ClearOTagR(MainOt, 5);
+    PadRead();
+    DebugControl();
+    Render();
+    ProcessTickGet(4, "RENDER SETUP");
+    SetPrimBuffPtr();
+    ClearOt();
+    pG->Frame_cnt++;
+    TaskScheduler();
+    ProcessTickGet(5, "TaskScheduler");
+    if (!SysFlagChk(pG, SYS_TRANS_STOP) || (StaFlagChk(pG, STA_SUB_SCRN))) {
+        IdSys.move();
+    }
+    if (!SysFlagChk(pG, SYS_TRANS_STOP) || (StaFlagChk(pG, STA_SUB_SCRN))) {
+        IdSys.trans();
+    }
+    if (!SysFlagChk(pG, SYS_TRANS_STOP)) {
+        Trans();
+    }
+    Dvd.Watcher();
+    SndWatcher();
+    ProcessTickGet(5, "SndWatcher");
+    FadeControl(0);
+    cMes.Move();
+    cMes.Trans();
+    CinescoMove();
+    if (!DbgFlagChk(pG, DBG_CINESCO_OFF)) {
+        Draw_cinesco();
+    }
+    FadeControl(1);
+    DrawOTag(&MainOt[4]);
+    if (pG->debug_mode != 7) {
+        pLog->disp();
+    }
+    EprintfFlush();
+    ProcessTickGet(2, "PROCESS CPU");
+    iTaskScheduler();
+    Render_done();
+    Block.checkCommand();
+    DC.check();
+    Block.checkCondition();
+    ProcessTickGet(3, "DRAW REMAIN");
+#ifndef OPENRE4_NATIVE
+    while (vsync_cnt < GetSystemVcnt() - 1) {}
+#endif
+    Render_swap();
+    PPCSync();
+#ifndef OPENRE4_NATIVE
+    while (vsync_cnt < GetSystemVcnt()) {}
+#endif
+    vsync_cnt = 0;
+    systemVSyncPost();
+    SysFlagOff(pG, SYS_RENDER_END);
+    ProcessTickGet(0, "PROCESS TOTAL");
 }
 
 // Hook after the vsync wait; empty.
@@ -273,6 +285,7 @@ void systemStartInit()
     VISetPostRetraceCallback(postVSyncCallback);
     Dvd.Init();
     CardInit();
+#if defined(__powerpc__) || defined(__ppc__)
     asm("li 3, 4\n"
         "oris 3, 3, 4\n"
         "mtspr 914, 3\n"
@@ -288,6 +301,7 @@ void systemStartInit()
         :
         :
         : "r3");
+#endif
     SystemMemInit();
     if (pG->IsDevConsole == 1) {
         CardDbgCacheSet();

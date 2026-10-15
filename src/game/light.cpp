@@ -16,6 +16,7 @@
 #include "cam_ctrl.h"
 #include "pendulum.h"
 #include "trans.h"
+#include <string.h>
 
 // game/trans.cpp texture LOD / TEV scale settings
 // trans.cpp; uninitialised there, so not in trans.h (a header extern reorders trans.cpp's .bss / .sbss)
@@ -24,7 +25,11 @@ extern u8 max_lod;
 extern f32 lod_bias;
 
 // pointer to game memory (0x80000000 .. 0x82FFFFFF)
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#define IN_RANGE(p) ((p) != NULL)
+#else
 #define IN_RANGE(p) ((u32) (p) - 0x80000000 <= 0x02FFFFFF)
+#endif
 
 void funcDelCtrl(cCtrl* pCtr);
 
@@ -91,6 +96,11 @@ int cLightMgr::roomInit(cLit* core, cLit* room, cLit* third)
         pLog->err(0, 0, "cLightMgr::roomInit() ROOM INVALID POINTER %08x", third);
         return 0;
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (core) core->convertEndian();
+    if (room) room->convertEndian();
+    if (third) third->convertEndian();
+#endif
     m_pLitCore = core;
     core->versionUp();
     m_pLitRoom = room;
@@ -1516,10 +1526,64 @@ cLightEnv* cLit::getCut(u16 no)
     return cut;
 }
 
+static inline void swapF32_light(f32* val)
+{
+    u32 tmp;
+    memcpy(&tmp, val, sizeof(f32));
+    tmp = __builtin_bswap32(tmp);
+    memcpy(val, &tmp, sizeof(f32));
+}
+
+void cLit::convertEndian()
+{
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    u32* ofs = (u32*) (this + 1);
+    bool isBE = (CutNum > 0xFF) || (ofs[0] > 0x00FFFFFF);
+    if (!isBE) {
+        return;
+    }
+
+    u16 numCuts = __builtin_bswap16(CutNum);
+    CutNum = numCuts;
+
+    for (u16 i = 0; i < numCuts; i++) {
+        ofs[i] = __builtin_bswap32(ofs[i]);
+    }
+
+    for (u16 i = 0; i < numCuts; i++) {
+        if (ofs[i] == 0) continue;
+        cLightEnv* cut = (cLightEnv*) ((u8*) this + ofs[i]);
+        cut->nLight = __builtin_bswap32(cut->nLight);
+        swapF32_light(&cut->Fog.Start);
+        swapF32_light(&cut->Fog.End);
+        swapF32_light(&cut->MirrorFog.Start);
+        swapF32_light(&cut->MirrorFog.End);
+        cut->FocusZ = (s32) __builtin_bswap32((u32) cut->FocusZ);
+        swapF32_light(&cut->far_play_ratio);
+        swapF32_light(&cut->lod_bias);
+
+        for (u32 j = 0; j < cut->nLight; j++) {
+            cLightWork* w = cut->getLightWork(j);
+            if (!w) break;
+            swapF32_light(&w->Pos.x); swapF32_light(&w->Pos.y); swapF32_light(&w->Pos.z);
+            swapF32_light(&w->Radius);
+            swapF32_light(&w->Intensity);
+            w->ParentNo = __builtin_bswap32(w->ParentNo);
+            w->HitRadius = __builtin_bswap16(w->HitRadius);
+            w->Dummy9 = __builtin_bswap32(w->Dummy9);
+            swapF32_light(&w->spot.Normal.x); swapF32_light(&w->spot.Normal.y); swapF32_light(&w->spot.Normal.z);
+            swapF32_light(&w->spot.A0); swapF32_light(&w->spot.A1); swapF32_light(&w->spot.A2);
+            swapF32_light(&w->spot.K0); swapF32_light(&w->spot.K1); swapF32_light(&w->spot.K2);
+        }
+    }
+#endif
+}
+
 // Upgrades a light block from versions <= 0x2B to 0x2C in place (default lod/aniso, tev scales,
 // tune, contrast, hokan, class bits, wind) and refreshes nMaxLight.
 int cLit::versionUp()
 {
+    convertEndian();
     cLightEnv* cut;
     cLightWork* w;
     u32 i;

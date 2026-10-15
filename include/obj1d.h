@@ -23,7 +23,7 @@ struct FREE_OBJ1D {
 // position of the two parts), with an optional pendulum cloth. Fades out when the parent is lost.
 class cObjChain : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ1D
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ1D
 
     virtual void move();
     virtual ~cObjChain() {}

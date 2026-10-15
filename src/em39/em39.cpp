@@ -648,13 +648,13 @@ static void em39_R0_Init(cEm39* em)
     // r0/r8/r11/r9/r10 and the subArc load of the routine MotionSetCore its r11, and the post-call
     // init block is issued in pure source order (no store carries a register death). Pinned here,
     // except r0, which the allocator picks by itself.
-    register int z0 asm("r20");
+    register int z0;
     int r0c;
-    register int r8c asm("r8");
-    register int r9c asm("r9");
-    register int r10c asm("r10");
-    register int r11c asm("r11");
-    register PlArc* arc11 asm("r11");
+    register int r8c;
+    register int r9c;
+    register int r10c;
+    register int r11c;
+    register PlArc* arc11;
 
     switch (em->type) {
     case 1:
@@ -2529,12 +2529,12 @@ static void em39_R1_JumpUp2(cEm39* em)
         // COMPILER-DIFF: #2 -- the target's `fmuls f12,f0,f12` ties the product to the constant's
         // register (its sum was not a tieable operand); value-carrying pins reproduce the tie and
         // the FPR names around it.
-        register f32 posy asm("fr11");
+        register f32 posy;
         f32 dy;
-        register f32 k asm("fr12");
-        register f32 t asm("fr12");
+        register f32 k;
+        register f32 t;
         f32 k19;
-        register f32 py asm("fr13");
+        register f32 py;
 
         MotionSetCore(em, &em->Motion, ARC(EM39_MOT_06A), ARC(EM39_SEQ_06B), 0xA, 1, 0);
         posy = em->pos.y;
@@ -2609,12 +2609,12 @@ static void em39_R1_JumpUp3(cEm39* em)
             // (`fmuls f12,f13,f12` / `fmuls f12,f0,f12`) and the 0.0 reuses the 1000.0 register;
             // value-carrying pins per arm (the JumpUp2 recipe). Store order x, y, z, x18: the zero's
             // first use sinks last, the dying stores keep source order.
-            register f32 posy asm("fr0");
+            register f32 posy;
             f32 dy;
-            register f32 k asm("fr12");
-            register f32 t asm("fr12");
+            register f32 k;
+            register f32 t;
             f32 k19;
-            register f32 py asm("fr0");
+            register f32 py;
 
             posy = em->pos.y;
             dy = w->Target_pos.y - posy + 1000.0f;
@@ -2630,12 +2630,12 @@ static void em39_R1_JumpUp3(cEm39* em)
             em->r_no_3 = 0;
         } else {
             MotionSetCore(em, &em->Motion, ARC(EM39_MOT_JUMP_UP3), ARC(EM39_SEQ_JUMP_UP3), 0xA, 1, 0);
-            register f32 posy asm("fr13"); // COMPILER-DIFF: #2 (see the other arm)
+            register f32 posy; // COMPILER-DIFF: #2 (see the other arm)
             f32 dy;
-            register f32 k asm("fr12");
-            register f32 t asm("fr12");
+            register f32 k;
+            register f32 t;
             f32 k19;
-            register f32 py asm("fr13");
+            register f32 py;
 
             posy = em->pos.y;
             dy = w->Target_pos.y - posy + 1000.0f;
@@ -8288,7 +8288,7 @@ int em39GotoCk(cEm39* em)
 // (Locate), damage counters reset, a 30-frame attack wait, Wait.
 void cEm39::set2ndBattle()
 {
-    register FREE_EM39* w asm("r29"); // COMPILER-DIFF: #13 -- w kept live past its last store (see the asm below)
+    register FREE_EM39* w; // COMPILER-DIFF: #13 -- w kept live past its last store (see the asm below)
     Vec p = { 31259.0f, 5250.0f, -14068.0f };
     u32 zero;
 

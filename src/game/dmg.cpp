@@ -5,11 +5,15 @@
 #include "dmg.h"
 #include "dbmodule.h"
 #include "math_sub.h"
+#include <cstdio>
 
 // A cManager<cDmg> pool of 0x118 byte works.
 cDmgMgr::cDmgMgr() : cManager<cDmg>(0x118, 2)
 {
     setName("cDmgMgr");
+    printf("[SIZEOF CHECK] sizeof(cDmg)=%zu, sizeof(cDmgCyl)=%zu, sizeof(cDmgP4)=%zu\n",
+           sizeof(cDmg), sizeof(cDmgCyl), sizeof(cDmgP4));
+    fflush(stdout);
 }
 
 // Places a cylinder (id 0) or quad (id 1) volume into the fresh work.

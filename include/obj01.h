@@ -44,7 +44,7 @@ struct FREE_OBJ01 {
 // or drowns when its fuse runs out; can be held by a model until `holdTimer` expires.
 class cObj01 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ01
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ01
 
     virtual void move();
     virtual ~cObj01() {}

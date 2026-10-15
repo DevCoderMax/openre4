@@ -1697,7 +1697,7 @@ void loadItemIdName(const char* path, char* names, char* names2)
         // The original allocates `e`/`no` to r30 and `p` to r31 although e outranks p in global-alloc
         // priority: r30 was ever-live before global-alloc there.  A codeless asm reading r30 makes it
         // used-so-far, so e/no take it in pass 0 and p falls to r31 in pass 1.
-        register int pin asm("r30"); // COMPILER-DIFF: candidate #17
+        register int pin; // COMPILER-DIFF: candidate #17
         asm("" : : "r"(pin));
     }
 
@@ -1755,4 +1755,6 @@ char* getItemIdStr(u32 id)
     return pW->idName2[id - 0x1000];
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

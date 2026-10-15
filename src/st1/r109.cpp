@@ -21,7 +21,7 @@ struct R109Work {
 
 static R109Work* r109_work;
 
-void koya_init();
+static void koya_init();
 
 static Vec r109_pos0 = {112971.0f, 2262.0f, 16941.0f};
 static Vec r109_pos1 = {117073.0f, 2262.0f, 17411.0f};
@@ -76,7 +76,7 @@ void R109Main()
 }
 
 // Hut scroll objects: show the intact set (bit 1) and hide the broken one.
-void koya_init()
+static void koya_init()
 {
     SmdGetObjPtr(1)->be_flag |= 2;
     SmdGetObjPtr(4)->be_flag |= 2;

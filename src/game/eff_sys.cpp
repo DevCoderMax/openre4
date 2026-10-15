@@ -402,6 +402,17 @@ int EffAreaDataLoad(SstArea* area)
         pLog->err(0, 0, "EffAreaDataLoad() : data already regist.");
         return 0;
     }
+#if defined(OPENRE4_NATIVE)
+    if (area && area->num > 0x1000) {
+        area->num = __builtin_bswap32(area->num);
+        area->ver_no = __builtin_bswap32(area->ver_no);
+        for (u32 i = 0; i < area->num; i++) {
+            SstAreaEnt* ent = &area->ent[i];
+            AreaHitDataConvertEndian(&ent->area);
+            ent->flag = __builtin_bswap32(ent->flag);
+        }
+    }
+#endif
     g_pEspSys->Area_addr = area;
     return 1;
 }
@@ -1133,4 +1144,6 @@ void RoomEfmRegist(void* model, void* tpl, u8 id)
     efmRegist(model, tpl, NULL, NULL, id, 1);
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

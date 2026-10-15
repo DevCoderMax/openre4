@@ -141,3 +141,11 @@ extern "C" void _unresolved()
 #line 144 "D:/Bio4/Prog/st1.cpp"
     HALT();
 }
+
+#ifdef TARGET_PC
+void st1_init()
+{
+    setTbl();
+    OSReport("[OpenRE4 Stage1] Todos os modulos de salas do estagio 1 registrados nativamente.\n");
+}
+#endif

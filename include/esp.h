@@ -571,7 +571,9 @@ public:
     };
     // 0xF4 vptr
 
-    void* operator new(unsigned int size);
+    void* operator new(size_t size);
+    void operator delete(void* p) noexcept {}
+    void operator delete(void* p, size_t) noexcept {}
     cEsp();
     virtual ~cEsp();
     virtual void move();

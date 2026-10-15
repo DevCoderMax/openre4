@@ -8,10 +8,12 @@
 class cModel;
 class cParts;
 
+#include <stddef.h>
+
 // Placement new used to construct camera objects inside CameraControl::extra_buf.
 #ifndef PLACEMENT_NEW_DEFINED
 #define PLACEMENT_NEW_DEFINED
-inline void* operator new(unsigned int, void* p) { return p; }
+inline void* operator new(size_t, void* p) { return p; }
 #endif
 
 // Base class of the special-purpose cameras (game/cam_extra.cpp, cam_motion.cpp).
@@ -22,7 +24,8 @@ class cCamera : public CAMERA {
 public:
     virtual ~cCamera() {}
     virtual void move() = 0;
-    void operator delete(void*, unsigned int) {}
+    void operator delete(void*, size_t) noexcept {}
+    void operator delete(void*) noexcept {}
 };
 
 // Screen-id (widget) application base: init/move/quit driven by the owning camera.
@@ -32,7 +35,8 @@ public:
     virtual void init(void* p) {}
     virtual void move(void* p) {}
     virtual void quit(void* p) {}
-    void operator delete(void*, unsigned int) {}
+    void operator delete(void*, size_t) noexcept {}
+    void operator delete(void*) noexcept {}
 };
 
 // Class declaration order below = the DOL's .text order of cam_extra.cpp. Vtables are emitted in

@@ -11,8 +11,14 @@ void* mem_calloc(u32 size, const char* file, int line, int a, int b);
 #define MEM_ALLOC(size, a, b) mem_alloc(size, __FILE__, __LINE__, a, b)
 #define MEM_CALLOC(size, a, b) mem_calloc(size, __FILE__, __LINE__, a, b)
 
-// Address inside the console main memory (MEM1: 0x80000000 to 0x82FFFFFF).
+// Address inside memory
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#define VALID_PTR(p) ((p) != 0)
+#define IS_MEM1_PTR(p) ((u32) (uintptr_t) (p) >= 0x80000000 && (u32) (uintptr_t) (p) < 0x84000000)
+#else
 #define VALID_PTR(p) ((u32) (p) >= 0x80000000 && (u32) (p) <= 0x82FFFFFF)
+#define IS_MEM1_PTR(p) VALID_PTR(p)
+#endif
 // Size / address rounded up to the 32-byte DMA and cache-line unit.
 #define ALIGN32(x) (((x) + 0x1F) & ~0x1F)
 

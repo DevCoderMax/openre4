@@ -148,12 +148,24 @@ SCE_TASK* scenarioGetOtAddr(SCE_TASK* pSceOt)
 {
     u32 tag;
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    while (pSceOt && (tag = pSceOt->tag) != 0xFFFFFFFF) {
+        pSceOt = (SCE_TASK*) OtLookup(tag);
+        if (!pSceOt) {
+            break;
+        }
+        if ((s32) tag < 0) {
+            return pSceOt;
+        }
+    }
+#else
     while ((tag = pSceOt->tag) != 0xFFFFFFFF) {
         pSceOt = (SCE_TASK*) (tag | 0x80000000);
         if ((s32) tag < 0) {
             return pSceOt;
         }
     }
+#endif
     return 0;
 }
 
@@ -450,7 +462,14 @@ void SceExecCheckCondition()
         return;
     }
     do {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        c = (SCE_EXEC_PRIM*) OtLookup(v);
+        if (!c) {
+            break;
+        }
+#else
         c = (SCE_EXEC_PRIM*) (v | 0x80000000);
+#endif
         if ((s32) v < 0) {
             if (SceExecCheckCondition_sub(c) == 1) {
                 if (c->func != 0) {
@@ -564,7 +583,7 @@ void SceSetEventCancel(int on, TaskFunc func, void* arg, int flagNo, int sndFlag
     {
         // COMPILER-DIFF: candidate #17 (global.c pass 0 regs_used_so_far): r30 used-so-far makes `on`
         // take r30 in pass 0 and flagNo r31 (stock priorities give on r31, flagNo r30).
-        register int pin asm("r30");
+        register int pin;
         asm volatile("" : "=r"(pin));
     }
 }

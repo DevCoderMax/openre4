@@ -32,7 +32,7 @@ struct FREE_OBJ12 {
 // type, a life counter and a throw routine).
 class cObj12 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ12
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ12
 
     virtual void move();
     virtual ~cObj12() {}

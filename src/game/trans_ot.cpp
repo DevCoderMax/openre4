@@ -1,6 +1,7 @@
 // game/trans_ot: the draw ordering tables (OT), depth-bucketed lists of draw callbacks that the render
 // pass runs back to front (ExecOt) so translucent things sort by depth.
 #include "types.h"
+#include <stdio.h>
 #include "vec.h"
 #include "global.h"
 #include "camera.h"
@@ -28,7 +29,9 @@ static int Ot_max_tbl[OT_MAX] = {
 OtWork g_OtWork[OT_MAX];
 OtMirrorWork g_OtMirrirWk[2];
 f32 OT_MUL = 0.05f;
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif
 int g_NowExecOtType;
 
 // Boot: allocates each table's bucket array (Ot_max_tbl sizes) and clears them.
@@ -81,9 +84,15 @@ OtData* MakeOtData(void* data)
 {
     OtPrim* p = (OtPrim*) GetPrimBuff(sizeof(OtPrim));
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (!p) {
+        return 0;
+    }
+#else
     if ((u32) p < 0x80000000 || (u32) p > 0x82FFFFFF) {
         return 0;
     }
+#endif
     p->data = data;
     return &p->ot;
 }
@@ -285,7 +294,7 @@ int ExecOt(int type)
     w->prev_kind = 0;
     if (p) {
         for (; p; p = p->next) {
-            if (p->data) {
+            if (p->data && p->func) {
                 count++;
                 p->func(p->data);
                 w->prev_kind = p->kind;

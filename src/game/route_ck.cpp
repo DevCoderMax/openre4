@@ -25,29 +25,65 @@ struct RckEmiData {
     RckEmiEntry entry[1];   // 0x08
 };
 
+void RtpConvertEndian(RTP* r)
+{
+    if (r == NULL || r->mapped != 0) {
+        return;
+    }
+    r->mapped = 1;
+    r->nPoint = __builtin_bswap16(r->nPoint);
+    r->nLine = __builtin_bswap16(r->nLine);
+    r->nNext = __builtin_bswap16(r->nNext);
+    r->pPoint = __builtin_bswap32(r->pPoint);
+    r->pLine = __builtin_bswap32(r->pLine);
+    r->pNext = __builtin_bswap32(r->pNext);
+
+    RTP_POINT* pt = (RTP_POINT*)((char*)r + r->pPoint);
+    for (int i = 0; i < r->nPoint; i++) {
+        u32* px = (u32*)&pt[i].pos.x; *px = __builtin_bswap32(*px);
+        u32* py = (u32*)&pt[i].pos.y; *py = __builtin_bswap32(*py);
+        u32* pz = (u32*)&pt[i].pos.z; *pz = __builtin_bswap32(*pz);
+        pt[i].offLine = __builtin_bswap16(pt[i].offLine);
+        pt[i].nLine = __builtin_bswap16(pt[i].nLine);
+    }
+
+    RTP_LINE* lk = (RTP_LINE*)((char*)r + r->pLine);
+    for (int i = 0; i < r->nLine; i++) {
+        lk[i].connect = (s16)__builtin_bswap16((u16)lk[i].connect);
+        lk[i].dist = __builtin_bswap16(lk[i].dist);
+    }
+}
+
 // The room's route point data.
 static inline RTP* rtpData()
 {
-    return (RTP*)pG->Rtp;
+    RTP* r = (RTP*)pG->Rtp;
+    if (r != NULL && !r->mapped) {
+        RtpConvertEndian(r);
+    }
+    return r;
 }
 
 // The point array of the RTP data.
 static inline RTP_POINT* rtpPoint(RTP* r)
 {
-    return (RTP_POINT*)(r->pPoint + (u32)r);
+    return (RTP_POINT*)((char*)r + r->pPoint);
 }
 
 // The link array (each point's links start at its offLine).
 static inline RTP_LINE* rtpLink(RTP* r)
 {
-    return (RTP_LINE*)(r->pLine + (u32)r);
+    return (RTP_LINE*)((char*)r + r->pLine);
 }
 
 // Next-hop table: row = current point, column = destination (read through the Global instance).
 static inline s8* rtpNextTbl()
 {
     RTP* r = (RTP*)Global.Rtp;
-    return (s8*)(r->pNext + (u32)r);
+    if (r != NULL && !r->mapped) {
+        RtpConvertEndian(r);
+    }
+    return (s8*)((char*)r + r->pNext);
 }
 
 
@@ -120,7 +156,7 @@ int RouteCkToEm(cEm* pMy, cEm* pTo, Vec* pDest, int mode)
     }
     {
         RTP* r = (RTP*) Global.Rtp;
-        tbl = (s8*) (r->pNext + (u32) r);
+        tbl = (s8*) ((char*) r + r->pNext);
     }
     next = tbl[rtpData()->nPoint * p + t];
     if (next == -1) {
@@ -137,7 +173,7 @@ int RouteCkToEm(cEm* pMy, cEm* pTo, Vec* pDest, int mode)
     }
     mask |= 0x80;
     pts = rtpPoint(rtpData());
-    pt = (RTP_POINT*)(pMy->RckMy * sizeof(RTP_POINT) + (u32)pts);
+    pt = &pts[pMy->RckMy];
     d2 = (pMy->pos.x - pt->pos.x) * (pMy->pos.x - pt->pos.x) + (pMy->pos.z - pt->pos.z) * (pMy->pos.z - pt->pos.z);
     if (d2 < 62500.0f || (next != pMy->RckMy && rckLineHitCheck(&a, &pts[next].pos, mask, mode) == 0)) {
         pMy->RckMy = next;
@@ -261,7 +297,7 @@ int RouteCkToPos(cEm* pMy, Vec* pPos, Vec* pDest, int mode, f32* pMax)
     }
     {
         RTP* r = (RTP*) Global.Rtp;
-        tbl = (s8*) (r->pNext + (u32) r);
+        tbl = (s8*) ((char*) r + r->pNext);
     }
     next = tbl[rtpData()->nPoint * p + t];
     if (next == -1) {
@@ -286,7 +322,7 @@ int RouteCkToPos(cEm* pMy, Vec* pPos, Vec* pDest, int mode, f32* pMax)
     }
     mask |= 0x80;
     pts = rtpPoint(rtpData());
-    pt = (RTP_POINT*)(pMy->RckMy * sizeof(RTP_POINT) + (u32)pts);
+    pt = &pts[pMy->RckMy];
     d2 = (pMy->pos.x - pt->pos.x) * (pMy->pos.x - pt->pos.x) + (pMy->pos.z - pt->pos.z) * (pMy->pos.z - pt->pos.z);
     if (d2 < 62500.0f || (next != pMy->RckMy && rckLineHitCheck(&a, &pts[next].pos, mask, mode) == 0)) {
         pMy->RckMy = next;
@@ -361,7 +397,7 @@ int RouteCkPosToPos(Vec* pPos1, Vec* pPos2, Vec* pDest)
     }
     {
         RTP* r = (RTP*) Global.Rtp;
-        tbl = (s8*) (r->pNext + (u32) r);
+        tbl = (s8*) ((char*) r + r->pNext);
     }
     next = tbl[rtpData()->nPoint * p + t];
     if (next == -1) {
@@ -370,12 +406,11 @@ int RouteCkPosToPos(Vec* pPos1, Vec* pPos2, Vec* pDest)
     }
     rtp = rtpData();
     {
-        u32 base = (u32) rtpPoint(rtp);
-        pts = (RTP_POINT*) base;
-        pt = (RTP_POINT*)(p * sizeof(RTP_POINT) + base);
+        pts = rtpPoint(rtp);
+        pt = &pts[p];
         d2 = (a.x - pt->pos.x) * (a.x - pt->pos.x) + (a.z - pt->pos.z) * (a.z - pt->pos.z);
         if (d2 < 62500.0f) {
-            *pDest = ((RTP_POINT*)(next * sizeof(RTP_POINT) + base))->pos;
+            *pDest = pts[next].pos;
             return 0;
         }
     }
@@ -489,7 +524,7 @@ f32 RouteCkGetDist(int n0, int n1)
     }
     {
         RTP* r = (RTP*) Global.Rtp;
-        tbl = (s8*) (r->pNext + (u32) r);
+        tbl = (s8*) ((char*) r + r->pNext);
     }
     pt = &rtpPoint(rtpData())[n0];
     do {

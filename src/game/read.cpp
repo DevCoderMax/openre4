@@ -23,6 +23,7 @@
 #include "trans.h"
 #include "sce_sys.h"
 #include "yz2code.h"
+#include "route_ck.h"
 
 extern void* EmInitFunc;                  // game/em.cpp (set by the enemy dll prolog)
 
@@ -182,6 +183,9 @@ void ReadAreaData()
         }
     }
     pG->Rtp = GetDataExt(pG->pRoom, "RTP", 0);
+    if (pG->Rtp != NULL) {
+        RtpConvertEndian((RTP*) pG->Rtp);
+    }
     pG->RoomMes = GetDataExt(pG->pRoom, "MDT", 0);
     pG->pOsd = GetDataExt(pG->pRoom, "OSD", 0);
     pG->pEmi = (EmiData*) GetDataExt(pG->pRoom, "EMI", 0);
@@ -478,6 +482,12 @@ void setEmModule(MODULE_DAT* m, int id)
         break;
     }
     if (m->pDll != NULL) {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        m->ctrl_flag.on(MODULE_CTRL_DLL_LINK);
+        extern void NativeEmProlog(u32 em_id);
+        NativeEmProlog(id);
+        m->EmInitFunc = EmInitFunc;
+#else
         if (!m->ctrl_flag.check(MODULE_CTRL_DLL_LINK)) {
             bss = NULL;
             if (m->pDll->bssSize != 0) {
@@ -499,6 +509,7 @@ void setEmModule(MODULE_DAT* m, int id)
         }
         DLL_PROLOG(m->pDll)();
         m->EmInitFunc = EmInitFunc;
+#endif
     } else {
         m->pDll = NULL;
         m->ctrl_flag.off(MODULE_CTRL_DLL_LINK);
@@ -692,8 +703,10 @@ void ReadPlayerData(int type, int costume)
                 }
             }
             PlReadModule.ctrl_flag.on(MODULE_CTRL_DLL_LINK);
+#if !defined(OPENRE4_NATIVE)
             DLL_Link(pModule, bss);
             DLL_PROLOG(pModule)();
+#endif
         } else {
             pModule = NULL;
         }
@@ -938,6 +951,7 @@ void ReadWepData(u32 no, u32 type)
         HALT();
     }
     pG->pWep = (PlArc*) info.start_addr[0][0];
+#if !defined(OPENRE4_NATIVE) && !defined(TARGET_PC)
     pModule = (OSModuleHeader*) (*(u32*) (data + 4) + (u32) data);
     size = (u32) pModule - (u32) data;
     bssSize = total - size;
@@ -964,6 +978,17 @@ void ReadWepData(u32 no, u32 type)
     WepReadModule.pDll = pModule;
     WepReadModule.pData = data;
     pG->pWep = (PlArc*) data;
+#else
+    WepReadModule.ctrl_flag.on(MODULE_CTRL_DLL_LINK);
+    WepReadModule.DllSize = 0;
+    WepReadModule.id = no;
+    WepReadModule.DataSize = total;
+    WepReadModule.pDll = NULL;
+    WepReadModule.pData = data;
+    pG->pWep = (PlArc*) data;
+    extern void NativeWepProlog(u32 wep_id);
+    NativeWepProlog(no);
+#endif
 }
 
 // After a continue: if the weapon changed since the module was loaded, reloads the weapon.
@@ -998,6 +1023,22 @@ void* GetDataExt(void* pData, const char* pName, int no)
         pLog->err(0, 0, "GetDataExt() NULL POINTER %08x %08x", pData, pName);
         return NULL;
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    num = __builtin_bswap32(h->num);
+    cnt = 0;
+    p = (u8*) pData + num * 4;
+    p += 0xC;
+    for (i = 0; i < num; i++) {
+        p += 4;
+        if (p[0] == pName[0] && p[1] == pName[1] && p[2] == pName[2]) {
+            if (cnt == no) {
+                u32 ofs = __builtin_bswap32(*(u32*) ((u8*) pData + 0x10 + i * 4));
+                return (void*) ((u8*) pData + ofs);
+            }
+            cnt++;
+        }
+    }
+#else
     num = h->num;
     cnt = 0;
     // tag table follows the offsets; p starts one entry early, the loop pre-increments (lbzu)
@@ -1012,7 +1053,10 @@ void* GetDataExt(void* pData, const char* pName, int no)
             cnt++;
         }
     }
+#endif
     return NULL;
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .bss; .balign 32");
+#endif

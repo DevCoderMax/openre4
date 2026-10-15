@@ -11,16 +11,18 @@
 // header, then the sub-file offsets (slot 8 / byte 0x20 is sub-file 4, not sub-file 8).
 struct ArcFile;
 // Offset first, then the archive base: preserve the target's 32-bit integer arithmetic.
-// As with PL_ARC_PTR, arc is evaluated twice and must have no side effects.
-#define CORE_ARC_PTR(arc, no) ((void*) (((u32*) (arc))[(no)] + (u32) (arc)))
-#define CORE_ARC(no) CORE_ARC_PTR(pG->pCore, no)
-
-// Player archive at pG->pPlArc: a table of byte offsets to the player's sub-files (models, textures,
-// motions, faces...). The pl_* units index it directly; the pointer is `ofs + (u32) arc`.
 struct PlArc {
     u32 ofs[0x100];   // pl_knife indexes up to 0x87
 };
+
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+#define CORE_ARC_PTR(arc, no) ((void*) ((u8*)(arc) + __builtin_bswap32(((u32*) (arc))[(no)])))
+#define PL_ARC_PTR(arc, no) ((void*) ((u8*)(arc) + __builtin_bswap32((arc)->ofs[no])))
+#else
+#define CORE_ARC_PTR(arc, no) ((void*) (((u32*) (arc))[(no)] + (u32) (arc)))
 #define PL_ARC_PTR(arc, no) ((void*) ((arc)->ofs[no] + (u32) (arc)))
+#endif
+#define CORE_ARC(no) CORE_ARC_PTR(pG->pCore, no)
 // Model / motion data `no` of the player archive.
 #define PL_ARC(no) PL_ARC_PTR(pG->pPlayer, no)
 // Weapon archive (read: ReadWepData) at pG->pWepArc, indexed like the player archive.
@@ -34,7 +36,11 @@ struct PlArc {
 struct RoomArc {
     u32 ofs[0x10];
 };
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+#define ROOM_ARC_PTR(arc, no) ((void*) ((u8*)(arc) + __builtin_bswap32(((RoomArc*) (arc))->ofs[no])))
+#else
 #define ROOM_ARC_PTR(arc, no) ((void*) (((RoomArc*) (arc))->ofs[no] + (u32) (arc)))
+#endif
 
 // TEV stage / texture map / texture coord counters the model renderer allocates from (pG+0x184).
 struct GxStageWork {
@@ -101,10 +107,17 @@ struct GLOBAL_WK {
     u32 DblBufIdx;        // 0x24  double-buffer index into cModelInfo::pPosBuf/pNrmBuf (mirror)
     union {
         u16 RoomNo_next;     // 0x28  room id (stage << 8 | room) being entered (snd: room BGM / door tables)
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
         struct {
             u8 Stage_next; // 0x28  (sce_at sceAtFunc_door stores the door destination byte by byte)
             u8 Room_next;  // 0x29
         };
+#else
+        struct {
+            u8 Room_next;  // 0x28 on Little Endian
+            u8 Stage_next; // 0x29 on Little Endian
+        };
+#endif
     };
     u8 Part_next;         // 0x2A  spawn point in the next room (room_jmp CRoomInfo::setNextPos clears it)
     u8 pad_2B;
@@ -128,10 +141,17 @@ struct GLOBAL_WK {
     GxStageWork gxStage;   // 0x184  TEV stage / texmap / texcoord counters of the model renderer (mirror)
     Mtx mtxPalette[0xF8];  // 0x190  skinning matrix palette (trans.cpp calcWeightMat / MakeWeightPalette)
     u8 pad_3010[0x4F10 - 0x3010];  // 0x3010  GXTexObj texObj[0xF8] (trans.cpp GxWork view of 0x184..0x4F14)
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    uintptr_t prim_base;   // 0x4F10  primitive buffer: current write pointer
+    f32 prim_rate;         // 0x4F14  worst free ratio of the primitive buffer seen so far
+    uintptr_t prim_cnt;    // 0x4F18  primitive buffer base pointer
+    s32 nPrim;             // 0x4F1C  entries per frame (game: ConsGetRoomValue(8), 0x8000 while stopped)
+#else
     s32 prim_base;         // 0x4F10  primitive buffer: first entry of the current frame (debug PrimitiveBuffDisp)
     f32 prim_rate;         // 0x4F14  worst free ratio of the primitive buffer seen so far
     s32 prim_cnt;          // 0x4F18  entries used so far this frame
     s32 nPrim;          // 0x4F1C  entries per frame (game: ConsGetRoomValue(8), 0x8000 while stopped)
+#endif
     void* RoomMes;        // 0x4F20  room message table (mes: MesData.m_Data[1])
     void* pCamCore;    // 0x4F24  core camera data ("B40x")
     void* pCamRoom;    // 0x4F28  room camera data ("B40x")
@@ -161,19 +181,33 @@ struct GLOBAL_WK {
     u32 peseta;            // 0x4F98  money (ss_shop buy/sell, item pickups; PlSelect swaps it with peseta_bak)
     union {
         u16 room_id;       // 0x4F9C  stage << 8 | room as one halfword (obj14: room 004 test)
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
         struct {
             u8 stage_no;   // 0x4F9C
             u8 room_no;    // 0x4F9D
         };
+#else
+        struct {
+            u8 room_no;    // 0x4F9C on Little Endian
+            u8 stage_no;   // 0x4F9D on Little Endian
+        };
+#endif
     };
     u8 Part;       // 0x4F9E  spawn point in the current room (copied to Part_old / next_point)
     u8 JumpPoint;  // 0x4F9F  room jump point (title/room_jmp debug jump; room scripts branch on 1/2)
     union {
         u16 room_id_prev;  // 0x4FA0  room_id of the previous room (room_jmp CRoomInfo::setNextPos)
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
         struct {
             u8 stage_prev; // 0x4FA0  stage the current room data was loaded for (stage.cpp)
             u8 room_prev;  // 0x4FA1
         };
+#else
+        struct {
+            u8 room_prev;  // 0x4FA0 on Little Endian
+            u8 stage_prev; // 0x4FA1 on Little Endian
+        };
+#endif
     };
     u8 Part_old;              // 0x4FA2  copy of x4F9E (room_jmp)
     s8 em_list_no;          // 0x4FA3  enemy list currently loaded (stage.cpp), -1 = none
@@ -259,7 +293,7 @@ struct SYSTEM_SAVE_WORK {
 extern SYSTEM_SAVE_WORK SystemSave;
 
 // stage_no/room_no read as one u16 (stage << 8 | room), as cRoomData::getRoomSavePtr wants it.
-#define G_ROOM_ID (*(u16*) &pG->stage_no)
+#define G_ROOM_ID (pG->room_id)
 
 // Flag helpers: `f |= b` / `f &= ~b` through a reference. Not an aliasing device: the pG reload after a
 // store is the compiler's own (docs/matching.md, "Compiler", mem-flags patch), and a plain `pG->x = v` is
@@ -1100,10 +1134,11 @@ enum KEY_FLAG {
     KYF_MAX = 54
 };
 
-// Test flag `no` in the word array at `base` (bit 31 - (no & 31) of word no >> 5).  The base is an
-// address rather than a field so a check can read the flags through whichever pointer the caller
-// holds.
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+#define FlagChk(base, no) (((u32*)(base))[((u32)(no)) >> 5] & (0x80000000U >> (((u32)(no)) & 31)))
+#else
 #define FlagChk(base, no) (*(u32*) ((((no) >> 5) << 2) + (u32) (base)) & (0x80000000 >> ((no) & 31)))
+#endif
 
 // The same test written as a shift into the sign bit, for a condition that tests two bits of one
 // word: two mask tests fold into a single mask and stop matching, two shifts stay two tests.
@@ -1237,11 +1272,17 @@ static inline void U16Set(u16& d, u16 v) { d = v; }
         memcpy(copyDst_, &(src), sizeof(Vec)); \
     }
 
+#if defined(OPENRE4_NATIVE)
+#define PG_OFS(f) ((uintptr_t) &((GLOBAL_WK*) 0)->f)
+// Death words of enemy list `list` (Em_flg row: eight u32, one bit per entry).
+#define EM_FLG_ROW(list) ((u32*) pG->Em_flg[list])
+#else
 // Offset of a GLOBAL_WK member, written with the null-pointer idiom. Address arithmetic that adds it to pG
 // keeps the offset as the last term (`pG->field` adds it first), which some callers need.
 #define PG_OFS(f) ((u32) &((GLOBAL_WK*) 0)->f)
 // Death words of enemy list `list` (Em_flg row: eight u32, one bit per entry). The scaled index is added to pG
 // first and the member offset last; written as `pG->Em_flg[list]` the address is built differently.
 #define EM_FLG_ROW(list) ((u32*) ((list) * 0x20 + (u32) pG + PG_OFS(Em_flg)))
+#endif
 
 #endif

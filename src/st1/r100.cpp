@@ -1,4 +1,6 @@
 #include "types.h"
+#include <cstdio>
+#include <cstdlib>
 #include "main_mem.h"
 #include "st_room.h"
 #include "atari.h"
@@ -78,7 +80,7 @@ static const AtEffInfo r100_eff_info5 = {
     2, {0xD2, 0}, {0xD2, 0}, {0xD2, 0}, {0xD2, 0}, {0xD2, 0}, {0xD2, 0}, {0xD2, 0}, {0xD2, 0},
 };
 
-int readEvent(int no, int wait, void** out);
+static int readEvent(int no, int wait, void** out);
 void freeEvent(int no, int swap);
 void r100_em_set();
 static void r100_GakeEvent(int arg);
@@ -99,7 +101,7 @@ static void r100_MesCar00();
 static void r100_MesCar01();
 static void r100_MesBrige();
 static void r100_EventBrige();
-void setTexRender();
+static void setTexRender();
 void Evt_R100S40_Func(Event* e, u32);
 void Evt_R100S20_Func(Event* e, u32);
 void Evt_R100S03_Func(Event* e, u32);
@@ -127,8 +129,13 @@ void R100Init()
         RsfSet(G_ROOM_ID, 3);
         RsfSet(G_ROOM_ID, 13);
     }
-#line 207 "D:/Bio4/Prog/r100.cpp"
     W = (R100Work*) MEM_CALLOC(sizeof(R100Work), 1, 0xd);
+#if defined(OPENRE4_NATIVE)
+    if (!W) {
+        W = (R100Work*) calloc(1, sizeof(R100Work));
+        printf("[OpenRE4 Debug] R100Init: MEM_CALLOC failed, using calloc fallback: W=%p\n", W);
+    }
+#endif
     EmReadSearch(0x12, 0, 0);
     if (pSys->eff_country == 0) {
         SetSstDispFlag(0x12, 0);
@@ -406,7 +413,9 @@ void R100Main()
 }
 
 // The original's .data is 8-aligned (r105 has the same).
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif
 static char* r100_evtName[10] = {
     "evd/r100s03.evd", "evd/r100s01.evd", "evd/r100s02.evd", "evd/r100s20.evd", "evd/r100s30.evd",
     "evd/r100s41.evd", "evd/r100s42.evd", "evd/r100s43.evd", "evd/r100s44.evd", "evd/r100s40.evd",
@@ -414,7 +423,7 @@ static char* r100_evtName[10] = {
 
 // Loads event `no` (r100_evtName) through a data unit; with `wait` the data is swapped into the
 // Ganado module's block (events 0, 4, 9) or loaded in place, and `out` receives its address.
-int readEvent(int no, int wait, void** out)
+static int readEvent(int no, int wait, void** out)
 {
     if (out != 0) {
         *out = 0;
@@ -1197,7 +1206,7 @@ static void r100_EventBrige()
     obj->Refract_ratio = v138;
 
 // The pond surface: a render target blended into the water objects.
-void setTexRender()
+static void setTexRender()
 {
     cObj* obj;
     u8* tbl = r100_texTbl;

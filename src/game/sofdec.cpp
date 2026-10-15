@@ -472,9 +472,14 @@ void cSofdec::draw()
 // the movie flags (Status_flg[0] 0x10000000, System_flg 0x00100000, m_be_flag bit0).
 void cSofdec::finishMovie()
 {
-    mwPlyDestroy(m_ap_obj.mwply);
-    m_ap_obj.mwply = NULL;
-    Mem_free(m_ap_obj.mwsfd_wkadr);
+    if (m_ap_obj.mwply != NULL) {
+        mwPlyDestroy(m_ap_obj.mwply);
+        m_ap_obj.mwply = NULL;
+    }
+    if (m_ap_obj.mwsfd_wkadr != NULL) {
+        Mem_free(m_ap_obj.mwsfd_wkadr);
+        m_ap_obj.mwsfd_wkadr = NULL;
+    }
     if (m_scn_ctrl.tex.ybuf != NULL) {
         Mem_free(m_scn_ctrl.tex.ybuf);
         Mem_free(m_scn_ctrl.tex.cbuf);
@@ -581,20 +586,21 @@ int cSofdec::Move()
     return ret;
 }
 
-// Task body: plays the movie to its end, then resumes slot 0 and exits.
 void cSofdec::ThreadMove(cSofdec* pThis)
 {
     int r = pThis->initWork(pThis->m_fname);
 
     if (r == 1) {
         pThis->initApp(pThis->m_fname);
-        pThis->startApp();
-        StaFlagOn(pG, STA_MOVIE_ON);
-        pThis->initSync();
-        pThis->m_be_flag = 1;
-        while (pThis->Move() == 0) {
-            TaskSleep(1);
+        if (pThis->startApp() != 0) {
+            StaFlagOn(pG, STA_MOVIE_ON);
+            pThis->initSync();
+            pThis->m_be_flag = 1;
+            while (pThis->Move() == 0) {
+                TaskSleep(1);
+            }
         }
+        pThis->finishMovie();
     }
     TaskSignal(0);
     TaskExit();

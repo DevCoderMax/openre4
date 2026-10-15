@@ -86,4 +86,6 @@ void cObj03::move()
 }
 
 // The split object's .sdata is 8 bytes (hist + padding to the 8-aligned next unit).
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

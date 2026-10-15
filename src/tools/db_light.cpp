@@ -673,7 +673,7 @@ static void edit_cutsel()
         env = pTool->Lit.getCut(pTool->table_y + i);
         eprintf(0x20, 0x54 + i * 14, pTool->table_y + i == pTool->cutNo ? 0 : 0x14, pTool->PageNo, "%03d", pTool->table_y + i);
         {
-            register int t asm("r0"); // COMPILER-DIFF: 4 (unmasked narrow store, see `line`)
+            register int t; // COMPILER-DIFF: 4 (unmasked narrow store, see `line`)
             t = i + 6;
             asm("" : "+r"(t)); // combine would fold the hard-reg copy into the addi
             line = t;
@@ -3010,7 +3010,7 @@ void draw_light_graph(cLight* l)
     {
         // COMPILER-DIFF: 2 + #17: the original's colour lives in r5 (a copy preference ours never gets)
         // and is zero-extended for the int argument before the nested call; the pin gives both.
-        register int col5 asm("r5");
+        register int col5;
         col5 = 0;
         if (v > 0.04f) {
             col5 = 6;
@@ -5851,4 +5851,6 @@ int cLitPathTool::createPath(cLightPathHeader* dst)
 }
 
 // the next object's .data is 8-aligned: the split object carries the 4-byte pad
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

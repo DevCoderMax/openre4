@@ -76,6 +76,20 @@ void cBlock::roomInit(void* data)
         pLog->err(0, 0, "THIS DATA IS NOT BLOCK AREA DATA");
         return;
     }
+#if defined(OPENRE4_NATIVE)
+    if (h->version == 0x0001) {
+        h->version = __builtin_bswap16(h->version);
+        h->nArea = __builtin_bswap16(h->nArea);
+        h->nConnect = __builtin_bswap16(h->nConnect);
+        h->ofsLink = __builtin_bswap32(h->ofsLink);
+        h->ofsArea = __builtin_bswap32(h->ofsArea);
+        h->ofsConnect = __builtin_bswap32(h->ofsConnect);
+        BlockArea* areas = (BlockArea*) ((u8*) h + h->ofsArea);
+        for (u32 i = 0; i < h->nArea; i++) {
+            AreaHitDataConvertEndian(&areas[i].area);
+        }
+    }
+#endif
     if (h->version != 0x100) {
         pLog->err(0, 0, "BLOCK AREA DATA IS OLD VERSION");
         return;

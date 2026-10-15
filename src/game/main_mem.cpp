@@ -55,6 +55,7 @@ static u8 CurrentDbgHeap;
 void* pMemTile;
 static u32 _epy;
 
+#ifndef OPENRE4_NATIVE
 // Zeroed allocation from the current heap.
 void* operator new(unsigned int size)
 {
@@ -78,12 +79,51 @@ void operator delete[](void* p)
 {
     Mem_free(p);
 }
+#endif
 
 // Boot: fixes the memory map, inits OSAlloc over [weapon archive end, heap_end/arena hi), creates
 // heap 0 over the whole range and allocates the reset-keep block pRK (a 0x40-byte save region
 // tagged "_reset_keep_" that survives soft resets).
 void SystemMemInit()
 {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    SysMem.Heap_end_addr = 0x83FF4000;
+#else
+    SysMem.Heap_end_addr = 0x817F4000;
+#endif
+    SysMem.Dvdread_addr = 0x80350000;
+    SysMem.Sound_addr = 0x80370000;
+    SysMem.Fifo_addr = 0x803F0000;
+    SysMem.Xfb_addr = 0x80460000;
+    SysMem.Core_addr = 0x80578000;
+    SysMem.Option_addr = 0x807AC000;
+    SysMem.Player_addr = 0x807EC000;
+    SysMem.Weapon_addr = 0x80904000;
+    SysMem.Heap_addr = 0x80974000;
+    SysMem.Debug_usb_addr = 0x81800000;
+    SysMem.Debug_addr = 0x8181FB00;
+    SysMem.Elf_end_addr = (u32)(uintptr_t)OSGetArenaLo();
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    void* lo = (void*)(uintptr_t)SysMem.Heap_addr;
+    void* hi = (void*)(uintptr_t)SysMem.Heap_end_addr;
+    OSReport("[SystemMemInit] Heap Region: %p - %p\n", lo, hi);
+    HeapHead = (OSHeapDescriptor*)lo;
+    void* allocBase = OSInitAlloc(lo, hi, MEM_HEAP_NUM);
+    OSReport("[SystemMemInit] allocBase=%p\n", allocBase);
+    OSSetArenaLo(allocBase);
+    OSSetArenaHi(hi);
+    memInitHeapTbl();
+    MemCreateHeap(0, allocBase, hi);
+    MemSetCurrentHeap(0);
+    pMemTile = NULL;
+    pRK = (RESET_KEEP_WORK*) MEM_ALLOC(0x40, 1, MEM_HEAP_CURRENT);
+    OSSetSaveRegion(pRK, (u8*) pRK + 0x40);
+    if (strcmp(pRK->head, "_reset_keep_") != 0) {
+        memclr_asm(pRK, 0x40);
+        strcpy(pRK->head, "_reset_keep_");
+        OSReport("RESET_KEEP_WORK memory clear...\n");
+    }
+#else
     SysMem.Heap_end_addr = 0x817F4000;
     SysMem.Dvdread_addr = 0x80350000;
     SysMem.Sound_addr = 0x80370000;
@@ -125,6 +165,7 @@ void SystemMemInit()
         strcpy(pRK->head, "_reset_keep_");
         OSReport("RESET_KEEP_WORK memory clear...\n");
     }
+#endif
 }
 
 // Clears the 13 heap slots and the suspend backups.
@@ -304,6 +345,29 @@ int MemDestroyHeap(int heap_no)
 // head in cell_main/game/stage/dll for the checker. 0 on failure.
 int MemReplaceHeap(int old_heap, int new_heap)
 {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    void* start;
+    void* end;
+
+    if (!memCheckHeapActive(old_heap)) {
+        return 0;
+    }
+    if (!memCheckHeapActive(new_heap)) {
+        return 0;
+    }
+    if (Heap[old_heap].handle >= 0) {
+        start = (void*)(((uintptr_t)Heap[old_heap].start + 0x20000 + 0x1F) & ~0x1F);
+        end = Heap[old_heap].end;
+        MemDestroyHeap(old_heap);
+    } else {
+        start = Heap[new_heap].start;
+        end = Heap[new_heap].end;
+    }
+    if (start == 0) {
+        return 0;
+    }
+    return MemCreateHeap(new_heap, start, end);
+#else
     u32 start;
     u32 end;
     OSHeapDescriptor* hd;  // function scope: a global pseudo, allocated after the blocks' local qtys (lis/cell r9)
@@ -342,6 +406,7 @@ int MemReplaceHeap(int old_heap, int new_heap)
         return 0;
     }
     return MemCreateHeap(new_heap, (void*) start, (void*) end);
+#endif
 }
 
 // Destroys every heap (soft reset).
@@ -395,9 +460,16 @@ void* mem_alloc(u32 size, const char* file, int line, int flag, int heap)
             tag[2] = 'A';
             tag[3] = 'D';
             strcpy((char*) tag + 4, str);
+            if ((uintptr_t)p >= 0x811f0000) {
+                printf("[mem_alloc] size=0x%x, p=%p..%p, tag=%p by %s\n", size, p, p + size, tag, str);
+                fflush(stdout);
+            }
         }
     }
     if (flag == 1 && p == NULL) {
+        printf("[DEBUG mem_alloc FAIL] size=0x%x, heap=%d, handle=%d, active=%d, CurrentHeap=%d\n",
+               size, heap, Heap[heap].handle, memCheckHeapActive(heap), CurrentHeap);
+        fflush(stdout);
         pLog->err(0, 0, "alloc[%x]:free[%x] %s", size, OSCheckHeap(Heap[heap].handle), str);
     }
     return p;
@@ -423,6 +495,9 @@ void Mem_free(void* pAddr)
 // Frees a block (to the OS current heap) when heap `heap` is active.
 void Mem_free_h(void* pAddr, int heap_no)
 {
+    if (pAddr == NULL) {
+        return;
+    }
     if (heap_no == MEM_HEAP_CURRENT) {
         heap_no = CurrentHeap;
     }
@@ -498,6 +573,9 @@ void Debug_free(void* addr)
 // Frees a debug block after wiping it (poison for stale pointers).
 void Debug_free_h(void* addr, int heap_no)
 {
+    if (addr == NULL) {
+        return;
+    }
     if (heap_no == MEM_HEAP_CURRENT) {
         heap_no = CurrentDbgHeap;
     }
@@ -649,6 +727,7 @@ void MemCheckUsedHeap()
         }
         ey += 14;
         next = cell->next;
+#if !defined(OPENRE4_NATIVE)
         if (next != NULL && next->next != NULL &&
             ((s32) next->next >= 0 || (u32) next->next > 0x82FFFFFF)) {
             pLog->err(0, 0, "heap next err:%-18s %6x %08x", tag + 4, cell->size - 0x20, cell);
@@ -656,6 +735,7 @@ void MemCheckUsedHeap()
 #line 770
             HALT();
         }
+#endif
         if (pMemTile != NULL && full == 0) {
             mt->code = 4;
             mt->x0 = x;
@@ -725,6 +805,7 @@ void MemCheckUsedHeap()
                 p += sprintf(p, "%6x %18s\n", cell->size - 0x20, tag + 4);
             }
             next = cell->next;
+#if !defined(OPENRE4_NATIVE)
             if (next != NULL && next->next != NULL &&
                 ((s32) next->next >= 0 || (u32) next->next > 0x82FFFFFF)) {
                 pLog->err(0, 0, "heap next err:%-18s %6x %08x", tag + 4, cell->size - 0x20, cell);
@@ -732,6 +813,7 @@ void MemCheckUsedHeap()
 #line 870
                 HALT();
             }
+#endif
         }
         for (cell = cell_stage; cell != NULL; cell = cell->next) {
             u8* tag = (u8*) cell + cell->size - 0x20;
@@ -748,6 +830,7 @@ void MemCheckUsedHeap()
                 p += sprintf(p, "%6x %18s\n", cell->size - 0x20, tag + 4);
             }
             next = cell->next;
+#if !defined(OPENRE4_NATIVE)
             if (next != NULL && next->next != NULL &&
                 ((s32) next->next >= 0 || (u32) next->next > 0x82FFFFFF)) {
                 pLog->err(0, 0, "heap next err:%-18s %6x %08x", tag + 4, cell->size - 0x20, cell);
@@ -755,6 +838,7 @@ void MemCheckUsedHeap()
 #line 904
                 HALT();
             }
+#endif
         }
         for (cell = cell_game; cell != NULL; cell = cell->next) {
             u8* tag = (u8*) cell + cell->size - 0x20;
@@ -771,6 +855,7 @@ void MemCheckUsedHeap()
             }
             ey += 14;
             next = cell->next;
+#if !defined(OPENRE4_NATIVE)
             if (next != NULL && next->next != NULL &&
                 ((s32) next->next >= 0 || (u32) next->next > 0x82FFFFFF)) {
                 pLog->err(0, 0, "heap next err:%-18s %6x %08x", tag + 4, cell->size - 0x20, cell);
@@ -778,6 +863,7 @@ void MemCheckUsedHeap()
 #line 938
                 HALT();
             }
+#endif
         }
         for (cell = cell_main; cell != NULL; cell = cell->next) {
             u8* tag = (u8*) cell + cell->size - 0x20;
@@ -794,6 +880,7 @@ void MemCheckUsedHeap()
             }
             ey += 14;
             next = cell->next;
+#if !defined(OPENRE4_NATIVE)
             if (next != NULL && next->next != NULL &&
                 ((s32) next->next >= 0 || (u32) next->next > 0x82FFFFFF)) {
                 pLog->err(0, 0, "heap next err:%-18s %6x %08x", tag + 4, cell->size - 0x20, cell);
@@ -801,6 +888,7 @@ void MemCheckUsedHeap()
 #line 974
                 HALT();
             }
+#endif
         }
     }
     {
@@ -860,4 +948,6 @@ static void memSetCheck()
 }
 
 // main_sub's .bss starts 8-aligned; the split object carries the 4-byte pad.
+#ifndef OPENRE4_NATIVE
 asm(".section .bss; .balign 8");
+#endif

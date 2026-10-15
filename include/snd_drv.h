@@ -831,7 +831,11 @@ void str_recovery_check(SND_STR* str);
 void Snd_str_dvd_read_sub(SND_STR* str);
 void Snd_str_aram_dma_sub(SND_STR* str);
 void cb_dvd_read_end(s32 result, DVDFileInfo* info);
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+void cb_aram_dma_end(uintptr_t task);
+#else
 void cb_aram_dma_end(u32 task);
+#endif
 void Snd_str_get_now_play_nbl(SND_STR* str);
 void str_ax_voice_to_next_block(SND_STR* str);
 void str_ax_voice_loop_to_top(SND_STR* str);

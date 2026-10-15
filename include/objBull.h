@@ -34,7 +34,7 @@ struct FREE_BULL {
 // (Sub_bull_*) while the player shoots the pursuers (objBullHitCk).
 class cObjBull : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_BULL
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_BULL
 
     virtual void move();
     virtual ~cObjBull() {}

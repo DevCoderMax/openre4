@@ -12,6 +12,7 @@
 
 class cModel;
 class cAtariInfo;
+class cSatBlock;
 
 #line 8 "D:/Bio4/Prog/atari.h"
 
@@ -34,6 +35,8 @@ public:
 
     Vec* getVertexPtr();
     int dataCheck();
+    void convertEndian();
+    void convertBlockEndian(cSatBlock* pBlock, int& count, int maxBlocks);
 };
 
 // Table of SAT files (room collision archive): offsets from the header.
@@ -57,7 +60,7 @@ public:
     u16 m_nSlope;          // 0x1A  group B
     u16 m_nWall;          // 0x1C  group C (walls: flag 0x80 checks [n0 + n1, n0 + n1 + n2))
     u16 m_Flag;        // 0x1E  bit0: `idx` holds a child cSatBlock
-    cSatBlock* m_pList; // 0x20
+    Ptr32<cSatBlock> m_pList; // 0x20
     u16 idx[0];      // 0x24  polygon indices
 
     int lineOverlap(Vec* center, Vec* w, Vec* v);

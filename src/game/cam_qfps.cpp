@@ -1155,8 +1155,8 @@ void CameraQuasiFPS::init()
     // store. Pinned constants go through plain references (the u8&/s16& setters would copy the hard
     // register into a pseudo), and a codeless keep-alive at the block end keeps every source live.
     int one;
-    register int two asm("r8");    // COMPILER-DIFF: #13 (value pin)
-    register int zero asm("r7");   // COMPILER-DIFF: #13 (value pin)
+    register int two;    // COMPILER-DIFF: #13 (value pin)
+    register int zero;   // COMPILER-DIFF: #13 (value pin)
     f32 fz;
     u32 fl;
     one = 1;

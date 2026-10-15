@@ -27,17 +27,28 @@ cPlLeon::cPlLeon()
 {
     PlArc* arc;
 
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() starting\n"); fflush(stdout);
     init0();
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() init0 done\n"); fflush(stdout);
     setModel();
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() setModel done\n"); fflush(stdout);
     weaponRelease();
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() weaponRelease done\n"); fflush(stdout);
     weaponLoad(pG->weapon_no, pG->weapon_type);
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() weaponLoad done\n"); fflush(stdout);
     weaponInit();
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() weaponInit done\n"); fflush(stdout);
     init1();
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() init1 done\n"); fflush(stdout);
     setMotion();
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() setMotion done\n"); fflush(stdout);
     arc = pG->pPlayer;
     EspDataLoad((u32) PL_ARC_PTR(arc, 0x1A), EFF_PL00, 0);
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() EspDataLoad done\n"); fflush(stdout);
     startUp();
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() startUp done\n"); fflush(stdout);
     pFsdTbl = pl_fs_tbl;
+    printf("[OpenRE4 Debug] cPlLeon::cPlLeon() finished\n"); fflush(stdout);
 }
 
 // Fills m_MotTbl 0x5F..0x6C (the ladder / crouch / partner-command motions) from archive 0x32..0x3F.

@@ -79,21 +79,21 @@ static void r119_EventGolemAppear();
 static void r119_EventParasiet();
 static void r119_EventDogAppear();
 static void koya_destroy_check();
-void koyaA_destroy();
-void koyaB_destroy();
-void koyaC_destroy();
-void YaneA_destroy();
-void YaneB_destroy();
-void YaneC_destroy();
-void koyaA_delete();
-void koyaB_smd_delete();
-void koyaB_delete();
-void koyaC_delete();
-void YaneA_delete();
-void YaneB_smd_delete();
-void YaneB_delete();
-void YaneC_delete();
-void koya_init();
+static void koyaA_destroy();
+static void koyaB_destroy();
+static void koyaC_destroy();
+static void YaneA_destroy();
+static void YaneB_destroy();
+static void YaneC_destroy();
+static void koyaA_delete();
+static void koyaB_smd_delete();
+static void koyaB_delete();
+static void koyaC_delete();
+static void YaneA_delete();
+static void YaneB_smd_delete();
+static void YaneB_delete();
+static void YaneC_delete();
+static void koya_init();
 void Evt_R119S00_Func(Event* e, u32);
 void Evt_R119S10_Func(Event* e, u32);
 void Evt_R119S20_Func(Event* e, u32);
@@ -428,7 +428,7 @@ static void koya_destroy_check()
 
 // Hut A is smashed by the giant: crash SE, the dust / debris effect (type 5 if its roof already fell,
 // Room_flg bit 4, else type 3), its models and collision removed, torch 0 broken.
-void koyaA_destroy()
+static void koyaA_destroy()
 {
     Vec pos = {113011.0f, 2270.0f, 16997.0f};
     Vec rot = {0.0f, 3.1415927f, 0.0f};
@@ -447,7 +447,7 @@ void koyaA_destroy()
 }
 
 // Hut B is smashed: as koyaA_destroy (roof flag bit 5, torch 1).
-void koyaB_destroy()
+static void koyaB_destroy()
 {
     Vec pos = {117111.0f, 2270.0f, 17477.0f};
     Vec rot = {0.0f, 3.1415927f, 0.0f};
@@ -466,7 +466,7 @@ void koyaB_destroy()
 }
 
 // Hut C is smashed: as koyaA_destroy (roof flag bit 6, torch 2).
-void koyaC_destroy()
+static void koyaC_destroy()
 {
     Vec pos = {121560.0f, 2270.0f, 15877.0f};
     Vec rot = {0.0f, 2.268928f, 0.0f};
@@ -518,7 +518,7 @@ void YaneC_destroy()
 }
 
 // Remove hut A: its collision pieces, scroll objects 1/4/5/0x26/0x27 hidden, item areas 0x98/0x99 off.
-void koyaA_delete()
+static void koyaA_delete()
 {
     SatMgr.destroy(r119_work->sat[0]);
     EatMgr.destroy(r119_work->eat[0]);
@@ -532,7 +532,7 @@ void koyaA_delete()
 }
 
 // Hide hut B's scroll objects (2/6/7/0x28/0x29); shared with the s00 event's setup.
-void koyaB_smd_delete()
+static void koyaB_smd_delete()
 {
     SmdSetTrans(2, 0);
     SmdSetTrans(6, 0);
@@ -542,7 +542,7 @@ void koyaB_smd_delete()
 }
 
 // Remove hut B: collision pieces, scroll objects, item area 0x97 off.
-void koyaB_delete()
+static void koyaB_delete()
 {
     SatMgr.destroy(r119_work->sat[1]);
     EatMgr.destroy(r119_work->eat[1]);
@@ -551,7 +551,7 @@ void koyaB_delete()
 }
 
 // Remove hut C: collision pieces, scroll objects 3/8/9/0x2A/0x2B, item areas 0x93..0x95 off.
-void koyaC_delete()
+static void koyaC_delete()
 {
     SatMgr.destroy(r119_work->sat[2]);
     EatMgr.destroy(r119_work->eat[2]);
@@ -567,7 +567,7 @@ void koyaC_delete()
 
 // Hut A without its roof: the attribute collision becomes the roofless piece (archive 0x21), roof
 // objects 4/5 hidden, the broken-roof objects 0x26/0x27 shown.
-void YaneA_delete()
+static void YaneA_delete()
 {
     EatMgr.destroy(r119_work->eat[0]);
     r119_work->eat[0] = EatMgr.create(ROOM_ARC_PTR(pG->pRoom, 0x21), 0, &r119_koyaPos[0], &r119_koyaRot[0], 0);
@@ -578,7 +578,7 @@ void YaneA_delete()
 }
 
 // Hut B without its roof (see YaneA_delete; objects 6/7 -> 0x28/0x29); shared with the s00 event.
-void YaneB_smd_delete()
+static void YaneB_smd_delete()
 {
     EatMgr.destroy(r119_work->eat[1]);
     r119_work->eat[1] = EatMgr.create(ROOM_ARC_PTR(pG->pRoom, 0x21), 0, &r119_koyaPos[1], &r119_koyaRot[1], 0);
@@ -589,13 +589,13 @@ void YaneB_smd_delete()
 }
 
 // Hut B without its roof.
-void YaneB_delete()
+static void YaneB_delete()
 {
     YaneB_smd_delete();
 }
 
 // Hut C without its roof (objects 8/9 -> 0x2A/0x2B).
-void YaneC_delete()
+static void YaneC_delete()
 {
     EatMgr.destroy(r119_work->eat[2]);
     r119_work->eat[2] = EatMgr.create(ROOM_ARC_PTR(pG->pRoom, 0x21), 0, &r119_koyaPos[2], &r119_koyaRot[2], 0);
@@ -606,7 +606,7 @@ void YaneC_delete()
 }
 
 // All three huts intact: hut/roof objects shown, the broken-roof objects hidden.
-void koya_init()
+static void koya_init()
 {
     SmdSetTrans(1, 1);
     SmdSetTrans(4, 1);

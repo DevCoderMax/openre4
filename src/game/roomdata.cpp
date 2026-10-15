@@ -88,6 +88,10 @@ void cRoomData::init()
     m_pModule_bss = 0;
     m_RelNo = 0;
     m_RoomNum = 0;
+#ifdef TARGET_PC
+    extern void st1_init();
+    st1_init();
+#endif
     for (stage = 0; stage <= 9; stage++) {
         if (Room_data_tbl[stage].tbl != 0) {
             m_RoomNum += Room_data_tbl[stage].num;
@@ -293,7 +297,7 @@ void cRoomData::linkRelData(u16 room_no)
         return;
     }
     m_RelNo = Room_data_tbl[stage].tbl[no].rel_file;
-#line 484
+#if !defined(TARGET_PC)
     id = DvdRead(m_RelNo, 0, 0, 0, 0, 0x104, __FILE__, __LINE__);
     while ((ret = Dvd.ReadCheck(id, 0, 0, (void**) &m_pModule)) != 1) {
         if (ret < 0) {
@@ -314,11 +318,16 @@ void cRoomData::linkRelData(u16 room_no)
     }
     DLL_Link(m_pModule, m_pModule_bss);
     DLL_PROLOG(m_pModule)();
+#else
+    m_CtrlFlag.off(CTRL_STOP);
+    OSReport("[OpenRE4 RoomData] Stage %u Room %03x vinculado nativamente sem DLL PPC.\n", stage, room_no);
+#endif
 }
 
 // Temporarily unlinks the room REL (CTRL_STOP), saving its bss to the backup.
 void cRoomData::stopRelData()
 {
+#if !defined(TARGET_PC)
     if (!m_CtrlFlag.check(CTRL_STOP) && m_pModule != 0) {
         m_CtrlFlag.on(CTRL_STOP);
         if (m_pModule_bss != 0) {
@@ -326,6 +335,9 @@ void cRoomData::stopRelData()
         }
         DLL_Unlink(m_pModule);
     }
+#else
+    m_CtrlFlag.on(CTRL_STOP);
+#endif
 }
 
 // Re-links a stopped room REL and restores its bss from the backup.

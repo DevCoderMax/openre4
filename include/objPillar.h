@@ -30,7 +30,7 @@ struct FREE_PILLAR {
 // escape with the action button; the escape / die sequences run as player damage routines.
 class cObjPillar : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_PILLAR
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_PILLAR
 
     virtual void move();
     virtual ~cObjPillar() {}

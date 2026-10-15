@@ -56,6 +56,15 @@ int SmdInit(cSmd* pSh, cSmxData* pSmxh, cSmd* pShCmn)
         pSmd = pSh;
         return 0;
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    pSh->convertEndian();
+    if (pShCmn != NULL) {
+        pShCmn->convertEndian();
+    }
+    if (pSmxh != NULL) {
+        pSmxh->convertEndian();
+    }
+#endif
     pSmx = pSmxh;
     pSmdComn = pShCmn;
     pSmd = pSh;
@@ -303,7 +312,11 @@ void smxInit(cObj* obj, cSmxWork* w)
         pLog->err(0, 0, "SmdInit() SMX WORK NUM ERR %d", w->ModelNo);
         return;
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (obj == NULL || !obj->isAlive()) {
+#else
     if ((u32) obj < 0x80000000 || (u32) obj > 0x82FFFFFF || !obj->isAlive()) {
+#endif
         pLog->err(0, 0, "SmdInit() SMX UNUSED cObj SELECT %d", w->ModelNo);
         return;
     }
@@ -314,6 +327,20 @@ void smxInit(cObj* obj, cSmxWork* w)
     obj->CullMode = w->CullMode;
     mi = obj->pModelInfo;
     if (mi != NULL) {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        memcpy(mi->color, &w->MaterialColor, 4);
+        if (mi->color[0] == 0 && mi->color[1] == 0 && mi->color[2] == 0) {
+            mi->color[0] = 0xFF;
+            mi->color[1] = 0xFF;
+            mi->color[2] = 0xFF;
+        }
+        memcpy(mi->color2, &w->SpecularColor, 4);
+        if (mi->color2[0] == 0 && mi->color2[1] == 0 && mi->color2[2] == 0) {
+            mi->color2[3] = 0;
+        } else {
+            mi->color2[3] = 0xFF;
+        }
+#else
         col = w->MaterialColor;
         *(u32*) mi->color = col;
         if ((col & ~0xFF) == 0) {
@@ -328,6 +355,7 @@ void smxInit(cObj* obj, cSmxWork* w)
         } else {
             mi->color2[3] = 0xFF;
         }
+#endif
         mi->blend_mode = mi->color[3];
         mi->color[3] = 0xFF;
         mi->uvScrollU = w->TexU;
@@ -374,7 +402,11 @@ cObj* SmdGetObjPtr(u32 idx)
         idx = 0;
     }
     obj = scrObjTbl[idx];
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (obj == NULL) {
+#else
     if ((u32) obj < 0x80000000 || (u32) obj > 0x82FFFFFF) {
+#endif
         if (DbgFlagChk(pG, DBG_TEST_MODE)) {
             if (!DbgFlagChk(pG, DBG_EVENT_TOOL)) {
                 return NULL;
@@ -417,6 +449,11 @@ int SmdGetWorkId(cObj* pObj)
 // Scroll block `blk` loaded: creates its objects from `smd`.
 void BlockCreate(int blkNo, cSmd* pBlock)
 {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (pBlock != NULL) {
+        pBlock->convertEndian();
+    }
+#endif
     pSmd = pBlock;
     SmdSetup(blkNo);
 }
@@ -448,10 +485,14 @@ void cSmd::slide(int offset)
     int nBin = 0;
     int nTpl;
     u32* tbl;
-    u32 addr;
+    uintptr_t addr;
     int i;
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (w == NULL) {
+#else
     if ((u32) w < 0x80000000 || (u32) w > 0x82FFFFFF) {
+#endif
         pLog->err(0, 0, "cSmd::slide(%d) PTR ERROR", offset);
         return;
     }
@@ -463,14 +504,18 @@ void cSmd::slide(int offset)
     {
         // An integer base (not a pointer) ranks below the hoisted 0x02FFFFFF constant in the
         // callee-saved allocation (base r28, constant r29).
-        u32 base = (u32) this + BinTblOfs;
+        uintptr_t base = (uintptr_t) this + BinTblOfs;
         for (i = 0; i < nBin; i++) {
             addr = base + ((u32*) base)[i];
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+            if (addr == 0) {
+#else
             if (addr < 0x80000000 || addr > 0x82FFFFFF) {
-                pLog->err(0, 0, "cSmd::slide() PTR ERR %08X", addr);
+#endif
+                pLog->err(0, 0, "cSmd::slide() PTR ERR %08X", (u32) addr);
                 return;
             }
-            slideModelAddr(addr, offset);
+            slideModelAddr((u32) addr, offset);
         }
     }
     nTpl = 0;   // set before the call: the pseudo crosses it and takes a callee-saved register
@@ -489,7 +534,7 @@ void cSmd::slide(int offset)
 // Work `no` (the works follow the group count table when Flag bit0).
 cSmdWork* cSmd::getWorkPtr(int id)
 {
-    return (Flag & 1) ? (cSmdWork*) ((u8*) this + grp.nGroup * 4 + 0x14) : &work[id];
+    return (Flag & 1) ? ((cSmdWork*) ((u8*) this + grp.nGroup * 4 + 0x14)) + id : &work[id];
 }
 
 // Model bin `no`.
@@ -566,7 +611,11 @@ cObj* SmdGetGroupObjPtr(u32 idx)
         idx = 0;
     }
     obj = scrObjTbl[idx];
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (obj == NULL) {
+#else
     if ((u32) obj < 0x80000000 || (u32) obj > 0x82FFFFFF) {
+#endif
         if (DbgFlagChk(pG, DBG_TEST_MODE)) {
             if (!DbgFlagChk(pG, DBG_EVENT_TOOL)) {
                 goto ng;
@@ -609,7 +658,11 @@ void SmdSetTrans(u32 idx, int onoff)
 {
     cObj* obj = SmdGetGroupObjPtr(idx);
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (obj == NULL) {
+#else
     if ((u32) obj < 0x80000000 || (u32) obj > 0x82FFFFFF) {
+#endif
         pLog->err(0, 0, "SmdSetTrans() INVALID INDEX %d", idx);
         return;
     }
@@ -621,6 +674,91 @@ void SmdSetTrans(u32 idx, int onoff)
         }
         obj = SmdGetGroupNext(obj);
     } while (obj != NULL);
+}
+
+static inline void swapF32(f32* val)
+{
+    u32 tmp;
+    memcpy(&tmp, val, sizeof(f32));
+    tmp = __builtin_bswap32(tmp);
+    memcpy(val, &tmp, sizeof(f32));
+}
+
+void cSmd::convertEndian()
+{
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    bool isBE = (BinTblOfs > 0x00FFFFFF) || (TplTblOfs > 0x00FFFFFF) || ((Flag & 1) && (grp.nGroup > 0xFFFF));
+    if (!isBE) {
+        return;
+    }
+
+    nModel = __builtin_bswap16(nModel);
+    BinTblOfs = __builtin_bswap32(BinTblOfs);
+    TplTblOfs = __builtin_bswap32(TplTblOfs);
+    MotTblOfs = __builtin_bswap32(MotTblOfs);
+
+    if (Flag & 1) {
+        grp.nGroup = __builtin_bswap32(grp.nGroup);
+        for (u32 i = 0; i < grp.nGroup; i++) {
+            grp.num[i] = __builtin_bswap32(grp.num[i]);
+        }
+    }
+
+    // Convert each cSmdWork in this SMD file (nModel entries)
+    for (int i = 0; i < (int) nModel; i++) {
+        cSmdWork* w = getWorkPtr(i);
+        swapF32(&w->Pos.x); swapF32(&w->Pos.y); swapF32(&w->Pos.z);
+        swapF32(&w->Ang.x); swapF32(&w->Ang.y); swapF32(&w->Ang.z);
+        swapF32(&w->Scale.x); swapF32(&w->Scale.y); swapF32(&w->Scale.z);
+        swapF32(&w->Radius);
+        w->Flag = __builtin_bswap32(w->Flag);
+        w->flags = __builtin_bswap32(w->flags);
+    }
+
+    // Convert Bin offset table
+    if (BinTblOfs != 0) {
+        u32* tbl = (u32*) ((u8*) this + BinTblOfs);
+        u32 firstOfs = __builtin_bswap32(tbl[0]);
+        u32 numBins = firstOfs / sizeof(u32);
+        if (numBins > 0 && numBins <= 256) {
+            for (u32 i = 0; i < numBins; i++) {
+                tbl[i] = __builtin_bswap32(tbl[i]);
+            }
+        }
+    }
+
+    // Convert Tpl offset table
+    if (TplTblOfs != 0) {
+        u32* tbl = (u32*) ((u8*) this + TplTblOfs);
+        u32 firstOfs = __builtin_bswap32(tbl[0]);
+        u32 numTpls = firstOfs / sizeof(u32);
+        if (numTpls > 0 && numTpls <= 256) {
+            for (u32 i = 0; i < numTpls; i++) {
+                tbl[i] = __builtin_bswap32(tbl[i]);
+            }
+        }
+    }
+#endif
+}
+
+void cSmxData::convertEndian()
+{
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (nData == 0) return;
+    cSmxWork* w0 = at(0);
+    bool isBE = (w0->Flag > 0x00FFFFFF) || ((w0->Flag & 0xFF000000) != 0);
+    if (!isBE) {
+        return;
+    }
+
+    for (u32 i = 0; i < (u32) nData; i++) {
+        cSmxWork* w = at(i);
+        w->LitSelectMask = __builtin_bswap32(w->LitSelectMask);
+        w->Flag = __builtin_bswap32(w->Flag);
+        swapF32(&w->TexU);
+        swapF32(&w->TexV);
+    }
+#endif
 }
 
 // A scenery object created by a room script (not from the SMD): blk -1, moving, bounding-box

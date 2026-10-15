@@ -205,10 +205,10 @@ cPlayer::cPlayer()
     pPL = this;
     hp = pG->pl_life;
     subArc = (PlArc*)0x807EC000;
-    m_MotTbl = (void**) PL_MEM_ALLOC(0x1B4, 373);
-    memclr_asm(m_MotTbl, 0x1B4);
-    m_MotTbl2 = (void**) PL_MEM_ALLOC(0x30, 376);
-    memclr_asm(m_MotTbl2, 0x30);
+    m_MotTbl = (void**) PL_MEM_ALLOC(0x6D * sizeof(void*), 373);
+    memclr_asm(m_MotTbl, 0x6D * sizeof(void*));
+    m_MotTbl2 = (void**) PL_MEM_ALLOC(12 * sizeof(void*), 376);
+    memclr_asm(m_MotTbl2, 12 * sizeof(void*));
     stat.on(F_NO_WEP_EFF);
     debugInit();
 }

@@ -48,7 +48,7 @@ struct FREE_OBJ1B {
 // follows a parts of the target), falls off as a three-point rope (R1_Fall) and fades out (Lost).
 class cObjSpear : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ1B
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ1B
 
     virtual void move();
     virtual void beginEvent(u32 mode);

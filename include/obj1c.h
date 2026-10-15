@@ -29,7 +29,7 @@ struct FREE_OBJ1C {
 // crash motion when hit, spawns water effects while alive.
 class cObj1c : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ1C
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ1C
 
     virtual void move();
     void setMotion(void* idle, void* crash, void* idleBig, void* crashBig);

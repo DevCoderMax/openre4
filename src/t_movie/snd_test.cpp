@@ -1603,7 +1603,7 @@ void Snd_test_disp_basic(SND_TEST* w)
 {
     // The original passes a stale r3 to the 2nd/3rd call (no `mr r3,r31` reload): the argument
     // was a hard-register variable, which GCC 2.95 does not restore after a call.
-    register SND_TEST* p asm("r3") = w;
+    register SND_TEST* p = w;
 
     if (w->disp_flag & 2) {
         Snd_test_disp_voice(p);
@@ -2190,14 +2190,18 @@ void aram_dump_dma(SND_TEST* w)
     SND_CTRL* ctrl = &Snd_ctrl_work;
 
     ctrl->arq_flag = 1;
-    ARQPostRequest(&ctrl->arq_req, 0, 1, 0, w->aram_adrs, (u32) Snd_test_work.aram_dump, 0x100, cb_dma_end);
+    ARQPostRequest(&ctrl->arq_req, 0, 1, 0, w->aram_adrs, (uintptr_t) Snd_test_work.aram_dump, 0x100, cb_dma_end);
     do {
     } while (ctrl->arq_flag != 0);
     DCInvalidateRange(w->aram_dump, 0x100);
 }
 
 // ARQ callback: marks the dump page ready.
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+static void cb_dma_end(uintptr_t task)
+#else
 static void cb_dma_end(u32 task)
+#endif
 {
     SND_CTRL* ctrl = &Snd_ctrl_work;
 

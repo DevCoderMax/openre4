@@ -41,7 +41,7 @@ struct FREE_WEP_ITEM {
 // landing sounds, a player hit check on the explosion and no flash / underwater variants.
 class cWepItem : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_WEP_ITEM
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_WEP_ITEM
 
     virtual void move();
     virtual void beginEvent(u32 mode);

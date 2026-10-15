@@ -42,7 +42,7 @@ struct FREE_OBJ18 {
 // cloth simulation selected by `type` (player costumes, enemy cloth sets, the ribbon / rope).
 class cObj18 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ18
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ18
 
     virtual void move();
     virtual ~cObj18() {}

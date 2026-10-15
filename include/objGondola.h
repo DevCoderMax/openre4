@@ -31,7 +31,7 @@ struct FREE_GONDOLA {
 // with five collision quads following the car; the break routine hands the camera over.
 class cObjGondola : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_GONDOLA
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_GONDOLA
 
     virtual void move();
     virtual ~cObjGondola() {}

@@ -245,6 +245,7 @@ struct SCE_AT_UNIT {
 
 // One AEV area record (0x9C bytes; PS2 SCE_AT_DATA is 0xA0).
 struct SCE_AT_DATA : SCE_AT_UNIT {
+    SCE_AT_DATA() {}
     union {
         u8 data[0x40];
         SCE_AT_DATA_DOOR door;

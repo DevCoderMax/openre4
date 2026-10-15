@@ -167,7 +167,7 @@ struct FREE_ROBO {
 // the door, then chases the player over the bridge, breaking its pieces one by one.
 class cObjRobo : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_ROBO
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_ROBO
 
     virtual void move();
     void SetBeginEvent(u32 a);

@@ -311,12 +311,14 @@ void PenClothMove(cModel* m, CLOTH_INFO* c)
                 // plain hard-register copy `pv = pa` survives (r5 is still live for the call, so combine
                 // cannot fold it and regmove stops at the call); the codeless asm reading pv with r3/r4
                 // inputs puts the copy after the last argument move in sched2, the target's issue order.
-                register Vec* pa asm("r5") = &v;
-                register Vec* pw asm("r3") = &w->Pos;
-                register Vec* pm asm("r4") = &mpos;
-                register Vec* pv asm("r28");
+                register Vec* pa = &v;
+                register Vec* pw = &w->Pos;
+                register Vec* pm = &mpos;
+                register Vec* pv;
                 pv = pa;
+#if defined(__powerpc__) || defined(__ppc__)
                 asm("" : "+r"(pv) : "r"(pm), "r"(pw));
+#endif
                 PSVECSubtract(pw, pm, pa);
                 v.y = 0.0f;
                 if (v.x != 0.0f && v.z != 0.0f) {
@@ -327,7 +329,9 @@ void PenClothMove(cModel* m, CLOTH_INFO* c)
                     // from cse1 so the `+ 1.0f` below stays a pool load: with the wind block's `+ 1.0f` it
                     // is then loop.c's combined (savings 2) constant movable, re-emitted in the preheader
                     // through emit_move_insn with a fresh high (`lis r9; lfs f30`), which is the original.
+#if defined(__powerpc__) || defined(__ppc__)
                     asm("" : "+f"(ang));
+#endif
                     if (c->pWindSin) {
                         ang = sinf(LIMIT_ANGLE(c->WindSin + c->pWindSin[i])) + 1.0f;
                         PSVECScale(pv, pv, ang);
@@ -549,7 +553,7 @@ void PenClothMove2(cModel* m, CLOTH_INFO* c)
     PEN_INFO* w;
     PEN_INFO* uw;
     cParts* np;   // neighbour parts (one variable for every lookup: r7 in the original)
-    register const u8* pp asm("r21");   // COMPILER-DIFF: #17 (register pin): pp above i in global-alloc
+    register const u8* pp;   // COMPILER-DIFF: #17 (register pin): pp above i in global-alloc
     u32 i;
     u32 k;
     int hit;
@@ -1157,7 +1161,16 @@ PenAtWork* penClothAtMake(cModel* m, CLOTH_AT_SET* at, int n)
     if (at == 0 || n == 0 || m == 0) {
         return 0;
     }
+#if defined(OPENRE4_NATIVE)
+    static struct {
+        int num;
+        CLOTH_AT_DATA* pAt;
+        CLOTH_AT_DATA at[256];
+    } s_PenAtWork;
+    wk = (PenAtWork*) &s_PenAtWork;
+#else
     wk = (PenAtWork*) 0xE0000000;
+#endif
     a = wk->at;
     wk->num = n;
     wk->pAt = a;
@@ -1628,4 +1641,6 @@ void PenWindSet(f32 dir, f32 power, f32 x)
 }
 
 // The next unit's .sdata starts 8-byte aligned in the original link.
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

@@ -273,8 +273,8 @@ static void r203_EventMeetAgain()
     GameSave.save(pSaveData, -1);
     // global-alloc pass 0 (regs_used_so_far): with r29 and f31 ever-live, the 0.0 pseudo takes f31,
     // m/ry share r29 and &ang falls to r31 in pass 1 as in the target (no code emitted).
-    register int pin asm("r29");   // COMPILER-DIFF: candidate #17
-    register f32 fpin asm("fr31"); // COMPILER-DIFF: candidate #17
+    register int pin;   // COMPILER-DIFF: candidate #17
+    register f32 fpin; // COMPILER-DIFF: candidate #17
     asm("" : "=r"(pin));
     asm("" : "=f"(fpin));
     asm("" : : "r"(pin), "f"(fpin));
@@ -356,4 +356,6 @@ void Evt_R203S00_Func(Event* e, u32)
 }
 
 // The module's .data continues 8-aligned.
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

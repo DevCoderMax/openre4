@@ -2321,7 +2321,7 @@ int cItemMgr::combine(cItem* a, cItem* b, int flag)
                     }
                     a->bullet = (inv << 13) | (n & 0x1FFF);
                     {
-                        register cItem* arm asm("r0"); // COMPILER-DIFF: 17 (local-alloc fake-lifetime parity: the m_pWep load reuses r0 right after the x8 store's value dies)
+                        register cItem* arm; // COMPILER-DIFF: 17 (local-alloc fake-lifetime parity: the m_pWep load reuses r0 right after the x8 store's value dies)
 
                         arm = m_pWep;
                         if (a == arm) {
@@ -2361,7 +2361,7 @@ int cItemMgr::combine(cItem* a, cItem* b, int flag)
                     }
                     b->bullet = (inv << 13) | (n & 0x1FFF);
                     {
-                        register cItem* arm asm("r0"); // COMPILER-DIFF: 17 (local-alloc fake-lifetime parity: the m_pWep load reuses r0 right after the x8 store's value dies)
+                        register cItem* arm; // COMPILER-DIFF: 17 (local-alloc fake-lifetime parity: the m_pWep load reuses r0 right after the x8 store's value dies)
 
                         arm = m_pWep;
                         if (b == arm) {
@@ -2666,7 +2666,7 @@ int cItemMgr::trigger()
     case 3:
     case 6: {
         cItem* p = m_pWep;
-        register int id asm("r9"); // COMPILER-DIFF: #2 (the original masks the u16 member before the call)
+        register int id; // COMPILER-DIFF: #2 (the original masks the u16 member before the call)
         id = m_wep_id;
         asm("" : "+r"(id));
 
@@ -2878,7 +2878,7 @@ void cItemMgr::save(void* pData)
     for (i = 0; i < m_array_num; i++, p++) {
         memclr_asm(&s[i], sizeof(ItemSaveWork));
         if (p->isEmpty()) {
-            register int m1 asm("r0"); // COMPILER-DIFF: #13 (the 0xFFFF re-materialised at the store)
+            register int m1; // COMPILER-DIFF: #13 (the 0xFFFF re-materialised at the store)
             m1 = -1;
             s[i].id = m1;
         } else {
@@ -3254,4 +3254,6 @@ void cItemMgr::debugWeapon(ITEM_ID id)
 }
 
 // the split object pads .sdata to 8 bytes (lbl_80313F4C)
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

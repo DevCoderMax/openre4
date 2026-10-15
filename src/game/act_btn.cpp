@@ -50,11 +50,19 @@ void cActionButton::move()
         init();
         return;
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    for (tag = m_ot[15]; tag != 0xFFFFFFFF; tag = w ? w->tag : 0xFFFFFFFF) {
+        w = (ACT_WORK*) OtLookup(tag);
+        if (!w || (s32) tag >= 0) {
+            continue;
+        }
+#else
     for (tag = m_ot[15]; tag != 0xFFFFFFFF; tag = w->tag) {
         w = (ACT_WORK*) (tag | 0x80000000);
         if ((s32) tag >= 0) {
             continue;
         }
+#endif
         if (w->flags & ACTCTR_NO_EXEC) {
             break;
         }
@@ -108,7 +116,7 @@ void cActionButton::disp(ACT_WORK* work)
     int x;
     // COMPILER-DIFF: candidate (local-alloc order): `fontH / 2` is computed in the MesSet argument
     // register r6 in the target; here the third fpmem-address scratch copy (`mr r6,r10`) takes r6 first.
-    register int y asm("r6");
+    register int y;
 
     if (work->flags & ACTCTR_DOOR_COLOR) {
         col = 7;
@@ -152,7 +160,7 @@ int cActionButton::checkButton(ACT_WORK* work)
     // that gets the pair left over after local-alloc gave the `key & ~mask` temp r9:r10; the target has
     // key in r9:r10 and the temp in r11:r12. With the pair fixed, the `or.` scratch alternates r0/r9 as
     // in the target, so the C/D leaves stay separate copies (their `or. r9` no longer matches `or. r0`).
-    register u64 key asm("r9");
+    register u64 key;
     u32 flags;
 
     switch (work->btn) {

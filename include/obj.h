@@ -57,7 +57,13 @@ public:
 };
 
 // One pool block per object: the manager's stride is the largest cObj subclass.
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#define OBJ_WORK_SIZE 0x800
+#define OBJ_WORK_BASE sizeof(cObj)
+#else
 #define OBJ_WORK_SIZE 0x3D8
+#define OBJ_WORK_BASE 0x328
+#endif
 
 class cObjMgr : public cManager<cObj> {
 public:

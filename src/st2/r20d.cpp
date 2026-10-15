@@ -1117,11 +1117,11 @@ void cLanternUnit::throwLantern(cLanternUnit* u)
     // The original keeps `st` (0) in r29 for the whole head and never folds it. Ours folds a user
     // variable known to be 0, so the hard register and launder hide the value and the reference
     // setters keep the stores before the pPL load.
-    register int st asm("r29"); // COMPILER-DIFF: #12 (user variable constant not folded)
+    register int st; // COMPILER-DIFF: #12 (user variable constant not folded)
     int cnt = 0;
     // COMPILER-DIFF: #2 (value-carrying FPR pin): the 0.0 pseudo is f30 and its `turn` copy f31 in the
     // target; local-alloc ties them the other way round.
-    register f32 zero asm("fr30");
+    register f32 zero;
     f32 turn;
 
     st = 0;

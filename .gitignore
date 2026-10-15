@@ -27,3 +27,4 @@ tools/research/mwccdbg/retrowin32
 data/
 *.gcm
 *.iso
+*.o

@@ -50,7 +50,7 @@ struct FREE_OBJ16 {
 // takes damage motions (R1_Damage) and fades out once its enemies are dead.
 class cObj16 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ16
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ16
 
     virtual void move();
     virtual ~cObj16() {}

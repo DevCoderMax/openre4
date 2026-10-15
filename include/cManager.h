@@ -3,10 +3,12 @@
 
 #include "types.h"
 
+#include <stddef.h>
+
 // Placement new for the managers' construct(): the work is constructed in place.
 #ifndef PLACEMENT_NEW_DEFINED
 #define PLACEMENT_NEW_DEFINED
-inline void* operator new(unsigned int, void* p) { return p; }
+inline void* operator new(size_t, void* p) { return p; }
 #endif
 
 // Base of every managed work object (cLight, cEsp, cObj, cEm, ...).
@@ -27,9 +29,8 @@ public:
     virtual void beginEvent(u32 mode) {}
     virtual void endEvent(u32 mode) {}
     // Works are pool-managed: `delete work` only runs the destructor (be_flag cleared).
-    // size_t is `unsigned int` for this compiler; with u32 (unsigned long) GCC 2.95 would not
-    // treat this as the usual deallocation function.
-    void operator delete(void*, unsigned int) {}
+    void operator delete(void*, size_t) noexcept {}
+    void operator delete(void*) noexcept {}
     // PS2 declares setAlive, isDieRequest and isDieRequest2 but no PS2 code calls them, so these
     // three masks are unconfirmed
     int setAlive() { return be_flag |= 1; }
@@ -86,7 +87,12 @@ public:
     T* create();
     T* create(int id, u32 no);
     T* createBack(int id);
-    void destroyNow(T* p);   // objRocket.cpp instantiates it (pl_wep weaponRelease)
+    void destroyNow(T* p) {
+        u8 f = flag;
+        flag = 0;
+        destroy(p);
+        flag = f;
+    }
     T* getPrevWork(T* p);
     int dieCheck();
     int arrayAlloc(u32 workNum);   // memFree + memAlloc(size * n) + memClear (em.cpp, game.cpp instantiate them)
@@ -397,12 +403,18 @@ void cManager<T>::destroyAll()
 template <class T>
 inline void cManager<T>::destroy(T* p)
 {
+#ifndef OPENRE4_NATIVE
     if ((u32)p < 0x80000000 || (u32)p > 0x82FFFFFF) {
         if (p != 0) {
             log("%s::destroy() ERROR, INVALID  PTR %08X", name, p);
         }
         return;
     }
+#else
+    if (p == 0) {
+        return;
+    }
+#endif
     deleteList(p);
     switch (flag) {
     case 0:

@@ -758,12 +758,12 @@ int brightness_menu(OptionScreen* pOpt)
             {
                 // COMPILER-DIFF: candidate (global alloc order): pSys must be allocated after DEFAULT
                 // (target r10/r11; ours has pSys 4 refs/18 = 0.444 > DEFAULT 3/9 = 0.333).
-                register SYSTEM_SAVE_WORK* s asm("r10") = pSys;
+                register SYSTEM_SAVE_WORK* s = pSys;
 
                 if (s->brightness < DEFAULT + MIN_OFS) {
                     // COMPILER-DIFF: candidate (local-alloc qty order): the byte-narrowed DEFAULT must take
                     // r9 (D dies into the sum) so the two `stb r9,0xa(r10)` tails cross-jump.
-                    register u8 d asm("r9") = DEFAULT;
+                    register u8 d = DEFAULT;
                     s->brightness = d + MIN_OFS;
                 } else {
                     n = s->brightness;

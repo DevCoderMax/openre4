@@ -53,7 +53,7 @@ struct OBJ05_FREE {
 // speed (kept in the parts' cModel at 0x128) and bouncing off the scenario / floor.
 class cObj05 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  OBJ05_FREE
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  OBJ05_FREE
 
     virtual void move();
 };

@@ -17,16 +17,50 @@ set(SDL_ALSA OFF CACHE BOOL "" FORCE)
 # Adiciona o Aurora
 add_subdirectory(vendor/aurora)
 
+add_definitions(-DTARGET_PC=1 -DOPENRE4_NATIVE=1)
+add_compile_options(-fpermissive -Wno-changes-meaning -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast -Wno-narrowing -Wno-register)
+
+file(GLOB GAME_SOURCES src/game/*.cpp)
+file(GLOB ST1_SOURCES src/st1/*.cpp)
+set(ST_SOURCES
+    src/st/em_wrap.cpp
+    src/st/cSceObj.cpp
+)
+set(WEP_SOURCES
+    src/platform/wep_native.cpp
+    src/wep/pl_handgun.cpp
+    src/wep/objRuger.cpp
+    src/wep02/objMauser.cpp
+    src/wep02/wep02.cpp
+)
+set(EM_SOURCES
+    src/platform/em_native.cpp
+    src/em10/em10.cpp
+    src/em12/em12_set.cpp
+)
+
 # Executável do OpenRE4 Nativo
 add_executable(openre4
     src/platform/main_native.cpp
+    src/platform/dolphin_shims.cpp
+    ${GAME_SOURCES}
+    ${ST1_SOURCES}
+    ${ST_SOURCES}
+    ${WEP_SOURCES}
+    ${EM_SOURCES}
 )
 
 target_include_directories(openre4 PRIVATE
+    vendor/aurora/include
+    ${CMAKE_BINARY_DIR}/_deps/sdl-src/include
     include
     src
     src/game
-    vendor/aurora/include
+    src/st1
+    src/wep
+    src/wep02
+    src/em10
+    src/em12
 )
 
 target_link_libraries(openre4 PRIVATE
@@ -35,8 +69,11 @@ target_link_libraries(openre4 PRIVATE
     aurora::gx
     aurora::vi
     aurora::pad
-    aurora::os
+    aurora::mtx
     aurora::dvd
+    aurora::card
+    aurora::thp
+    aurora::os
 )
 
 message(STATUS "OpenRE4 configurado com sucesso para compilação nativa.")

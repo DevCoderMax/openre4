@@ -13,10 +13,17 @@ struct CRoomInfo {
     u16 flag;      // 0x00  bit 0: pos/angle valid
     union {
         u16 roomNo;  // 0x02  stage << 8 | room
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
         struct {
             u8 stage;  // 0x02
             u8 room;   // 0x03
         };
+#else
+        struct {
+            u8 room;   // 0x02 on Little Endian
+            u8 stage;  // 0x03 on Little Endian
+        };
+#endif
     };
     Vec pos;        // 0x04
     f32 angle;      // 0x10

@@ -1085,6 +1085,9 @@ void cSat::init(cSatFile* pSf, Vec* pos, Vec* ang)
         pLog->err(0, 0, "cSat::init() PTR ERR %08X", pSf);
         return;
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    pSf->convertEndian();
+#endif
     if (!pSf->dataCheck()) {
         pLog->err(0, 0, "ATARI DATA ERROR 0x%08x", pSf);
     }
@@ -1140,16 +1143,22 @@ void cSat::blockInit(cSatBlock* pBlock)
         pLog->err(0, 0, "cSat::blockInit() INVALID PTR 0x%08x", pBlock);
         return;
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (IS_MEM1_PTR(pBlock->m_pList)) {
+        return;
+    }
+#else
     if (VALID_PTR(pBlock->m_pList)) {
         return;
     }
+#endif
     do {
         if (pBlock->m_Flag & 1) {
             blockInit((cSatBlock*) pBlock->idx);
         }
         {
-            u32 ofs = (u32) pBlock->m_pList;
-            if (ofs != 0) {
+            u32 ofs = (u32) (uintptr_t) pBlock->m_pList;
+            if (ofs != 0 && !IS_MEM1_PTR(ofs)) {
                 cSatBlock* p = (cSatBlock*) ((u8*) pBlock + ofs);
                 if (p != 0 && !VALID_PTR(p)) {
                     pLog->err(0, 0, "cSat::blockInit() INVALID PTR 0x%08x ( %08x )", p, ofs);
@@ -1227,12 +1236,130 @@ int cSatFile::dataCheck()
     return m_nPolygon <= 0x1FFF;
 }
 
+// Endian conversion for SAT files
+void cSatFile::convertEndian()
+{
+    if (x1 & 1) {
+        return;
+    }
+    // Check if endian conversion is needed
+    if (m_nPolygon <= 0x1FFF && m_nBlock <= 0x1FFF && m_nVertex <= 0x3FFF) {
+        x1 |= 1;
+        return;
+    }
+
+    m_nVertex = __builtin_bswap16(m_nVertex);
+    m_nNormal = __builtin_bswap16(m_nNormal);
+    m_nEdge = __builtin_bswap16(m_nEdge);
+    x8 = __builtin_bswap16(x8);
+    m_nPolygon = __builtin_bswap16(m_nPolygon);
+    m_nFloor = __builtin_bswap16(m_nFloor);
+    m_nSlope = __builtin_bswap16(m_nSlope);
+    m_nWall = __builtin_bswap16(m_nWall);
+    m_nBlock = __builtin_bswap16(m_nBlock);
+
+    // Swap vertices
+    Vec* v = getVertexPtr();
+    for (int i = 0; i < m_nVertex; i++) {
+        u32* p = (u32*) &v[i];
+        p[0] = __builtin_bswap32(p[0]);
+        p[1] = __builtin_bswap32(p[1]);
+        p[2] = __builtin_bswap32(p[2]);
+    }
+
+    // Swap normals
+    Vec* norm = v + m_nVertex;
+    for (int i = 0; i < m_nNormal; i++) {
+        u32* p = (u32*) &norm[i];
+        p[0] = __builtin_bswap32(p[0]);
+        p[1] = __builtin_bswap32(p[1]);
+        p[2] = __builtin_bswap32(p[2]);
+    }
+
+    // Swap edges
+    Vec* edge = norm + m_nNormal;
+    for (int i = 0; i < m_nEdge; i++) {
+        u32* p = (u32*) &edge[i];
+        p[0] = __builtin_bswap32(p[0]);
+        p[1] = __builtin_bswap32(p[1]);
+        p[2] = __builtin_bswap32(p[2]);
+    }
+
+    // Swap polygons
+    SAT_POLY* poly = (SAT_POLY*) (edge + m_nEdge);
+    for (int i = 0; i < m_nPolygon; i++) {
+        poly[i].v[0] = __builtin_bswap16(poly[i].v[0]);
+        poly[i].v[1] = __builtin_bswap16(poly[i].v[1]);
+        poly[i].v[2] = __builtin_bswap16(poly[i].v[2]);
+        poly[i].m_Normal = __builtin_bswap16(poly[i].m_Normal);
+        poly[i].e[0] = __builtin_bswap16(poly[i].e[0]);
+        poly[i].e[1] = __builtin_bswap16(poly[i].e[1]);
+        poly[i].e[2] = __builtin_bswap16(poly[i].e[2]);
+        poly[i].m_Dummy7 = __builtin_bswap16(poly[i].m_Dummy7);
+        poly[i].m_Status = __builtin_bswap32(poly[i].m_Status);
+    }
+
+    // Swap blocks
+    cSatBlock* root = (cSatBlock*) (poly + m_nPolygon);
+    int blockCount = 0;
+    convertBlockEndian(root, blockCount, m_nBlock);
+
+    x1 |= 1;
+}
+
+void cSatFile::convertBlockEndian(cSatBlock* pBlock, int& count, int maxBlocks)
+{
+    while (pBlock && count < maxBlocks) {
+        count++;
+
+        // Swap min
+        u32* pMin = (u32*) &pBlock->min;
+        pMin[0] = __builtin_bswap32(pMin[0]);
+        pMin[1] = __builtin_bswap32(pMin[1]);
+        pMin[2] = __builtin_bswap32(pMin[2]);
+
+        // Swap size
+        u32* pSize = (u32*) &pBlock->m_Size;
+        pSize[0] = __builtin_bswap32(pSize[0]);
+        pSize[1] = __builtin_bswap32(pSize[1]);
+        pSize[2] = __builtin_bswap32(pSize[2]);
+
+        pBlock->m_nFloor = __builtin_bswap16(pBlock->m_nFloor);
+        pBlock->m_nSlope = __builtin_bswap16(pBlock->m_nSlope);
+        pBlock->m_nWall = __builtin_bswap16(pBlock->m_nWall);
+        pBlock->m_Flag = __builtin_bswap16(pBlock->m_Flag);
+
+        u32 ofs = __builtin_bswap32(pBlock->m_pList.addr);
+        pBlock->m_pList.addr = ofs; // keep as relative offset until blockInit
+
+        if (pBlock->m_Flag & 1) {
+            convertBlockEndian((cSatBlock*) pBlock->idx, count, maxBlocks);
+        } else {
+            int polyCount = pBlock->m_nFloor + pBlock->m_nSlope + pBlock->m_nWall;
+            for (int i = 0; i < polyCount; i++) {
+                pBlock->idx[i] = __builtin_bswap16(pBlock->idx[i]);
+            }
+        }
+
+        if (ofs != 0) {
+            pBlock = (cSatBlock*) ((u8*) pBlock + ofs);
+        } else {
+            pBlock = nullptr;
+        }
+    }
+}
+
 // SAT `no` of a multi-SAT archive (offset table after the header).
 cSatFile* cSatHeader::getSat(int no)
 {
-    u32* tbl = ofs;
-
-    return (cSatFile*) ((u8*) this + *(u32*) (no * 4 + (u32) tbl));
+    u32 off = ofs[no];
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (off > 0x00FFFFFF) {
+        off = __builtin_bswap32(off);
+        ofs[no] = off;
+    }
+#endif
+    return (cSatFile*) ((u8*) this + off);
 }
 
 // The three builders below with precomputed normals were dead-stripped by the linker; their

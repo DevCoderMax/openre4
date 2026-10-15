@@ -367,7 +367,9 @@ void clothTrans(Cloth* pCL)
     GXSetTevAlphaOp(0, 0, 0, 2, 1, 0);
     GXSetTevOrder(0, 0, 0, 4);
     cModel model;
+#if defined(__powerpc__) || defined(__ppc__)
     u8 modelPad[0x320 - sizeof(cModel)];  // see the cModel size note above
+#endif
     PSMTXIdentity(model.mat);
     {
         static const Vec p0 = {0.0f, 0.0f, 0.0f};

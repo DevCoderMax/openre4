@@ -12,6 +12,7 @@
 #endif
 #include <dolphin/dvd.h>
 #include <dolphin/ar.h>
+#include <dolphin/arq.h>
 
 // DvdHeader::type (PS2 DVD_HEADER_ID): where a part goes; TRANS_NONE skips the entry, TRANS_EOF ends the table.
 enum DVD_HEADER_ID {
@@ -26,7 +27,7 @@ enum DVD_HEADER_ID {
 
 // One entry of the file header read in front of a multi-part file (header_buff, 64 entries).
 struct DvdHeader {
-    u32 type;    // 0x00  DVD_HEADER_ID: MRAM, snd block (ARAM), snd PCM (MRAM), ARAM, nested header, -2 skip, -1 end
+    s32 type;    // 0x00  DVD_HEADER_ID: MRAM, snd block (ARAM), snd PCM (MRAM), ARAM, nested header, -2 skip, -1 end
     u32 size;    // 0x04
     u32 dest;    // 0x08  explicit destination (0 = next free MRAM/ARAM address)
     u32 ofs;     // 0x0C  offset inside the file
@@ -54,7 +55,11 @@ struct DVD_REQ_WORK {
 
 // Result block filled by cDvd::readCheckMain for a finished request (0x208 bytes).
 struct DVD_READINFO {
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+    uintptr_t start_addr[2][32];  // 0x000  destination of every part, per header level
+#else
     u32 start_addr[2][32];  // 0x000  destination of every part, per header level
+#endif
     u32 read_size[2][32];   // 0x100
     u32 mram_readsize;      // 0x200
     u32 aram_readsize;      // 0x204
@@ -82,10 +87,17 @@ public:
     u8 m_Id;               // 0x4F  request number returned to the caller
     cDvdQueue* m_Next;     // 0x50
     void* pBuff;         // 0x54  destination (allocated when 0)
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+    uintptr_t aram;            // 0x58
+    uintptr_t m_MramAddr;        // 0x5C  next free MRAM address
+    uintptr_t m_AramAddr;        // 0x60  next free ARAM address
+    uintptr_t m_TransAddr;        // 0x64  destination of the current part
+#else
     u32 aram;            // 0x58
     u32 m_MramAddr;        // 0x5C  next free MRAM address
     u32 m_AramAddr;        // 0x60  next free ARAM address
     u32 m_TransAddr;        // 0x64  destination of the current part
+#endif
     u32 length;          // 0x68
     s32 m_LeftSize;          // 0x6C
     u32 m_DivReadSize;        // 0x70
@@ -98,7 +110,11 @@ public:
     u8 m_HeapNo;             // 0xA6
     s8 m_ResultCode;              // 0xA7
     char m_Name[0x20];     // 0xA8
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+    uintptr_t addrTbl[2][32];  // 0xC8
+#else
     u32 addrTbl[2][32];  // 0xC8
+#endif
     u32 sizeTbl[2][32];  // 0x1C8
     u32 mramSize;        // 0x2C8
     u32 aramSize;        // 0x2CC
@@ -120,8 +136,13 @@ public:
     char* getName() { return m_Name; }
 
 private:
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+    void trans2mram(void* buf, uintptr_t addr, u32 size);
+    void trans2aram(void* buf, uintptr_t addr, u32 size);
+#else
     void trans2mram(void* buf, u32 addr, u32 size);
     void trans2aram(void* buf, u32 addr, u32 size);
+#endif
     void readInit();
     void readMain();
     void readCancelWait();
@@ -229,7 +250,7 @@ extern cAram Aram;
 
 // File name table (game/dvd.cpp); entrynum -1 = not on the disc.
 struct FileTblEntry {
-    const char* name;
+    char name[32];
     s32 entrynum;
 };
 extern FileTblEntry FileTbl[];

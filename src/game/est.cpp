@@ -473,4 +473,6 @@ void EstSetEm10WaterFall(cModel* pMod)
     }
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .rodata; .balign 8");
+#endif

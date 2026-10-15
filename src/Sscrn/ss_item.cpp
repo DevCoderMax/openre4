@@ -807,7 +807,7 @@ END:
     for (i = 0; i < 2;) {
         int no;
         {
-            register int pin asm("r30"); // COMPILER-DIFF: candidate #17
+            register int pin; // COMPILER-DIFF: candidate #17
             asm("" : "=r"(pin) : "r"(i));
             asm("" : : "r"(pin));
         }
@@ -1263,7 +1263,7 @@ void itemMakeInit(SUB_SCREEN* wk)
         // hard register); the dead `types = 0` in each arm makes the arm two insns until flow deletes
         // it (jump1/cse-jump cannot hoist) and gives each `li` a REG_WAS_0 note next to cse's REG_EQUAL
         // (two notes: jump2 cannot hoist either).
-        register int types asm("r29");  // COMPILER-DIFF: 12
+        register int types;  // COMPILER-DIFF: 12
         mk->id[i] = 0;
         if (i == 0) {
             types = 0;  // COMPILER-DIFF: 12 (dead set, see above)
@@ -1307,8 +1307,8 @@ void itemMakeMove(SUB_SCREEN* wk)
     case 0:
     case 1: {
         int d = 0;
-        register int hi asm("r28"); // COMPILER-DIFF: candidate #17
-        register int lo asm("r29"); // COMPILER-DIFF: candidate #17
+        register int hi; // COMPILER-DIFF: candidate #17
+        register int lo; // COMPILER-DIFF: candidate #17
         int n;
         if (mk->cursor == 0) {
             hi = 7;

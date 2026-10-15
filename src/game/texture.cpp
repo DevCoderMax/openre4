@@ -7,6 +7,7 @@
 #include "db_log.h"
 #include "main_mem.h"
 #include "texture.h"
+#include <stdlib.h>
 
 #line 20 "D:/Bio4/Prog/texture.cpp"
 
@@ -87,6 +88,39 @@ void cTexSys::SetTexObjFlag(u32 no, int flag)
 // (non-repeating) textures. Returns 0 on a bad file.
 int cTexSys::DataLoad(TexData* data, u32 owner, int clamp)
 {
+    if (!data) {
+        return 0;
+    }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    u8* base = (u8*) data;
+    u32 ver = data->version;
+    bool is_be = (ver == 0x03000000);
+    if (is_be) {
+        ver = __builtin_bswap32(ver);
+    }
+    if (ver != 3) {
+        pLog->err(0, 0, "%s::DataLoad() : Data Invalid. [0x%p]", m_name, data);
+        return 0;
+    }
+    u32 oI = is_be ? __builtin_bswap32(data->ofsId) : data->ofsId;
+    u32 oT = is_be ? __builtin_bswap32(data->ofsTpl) : data->ofsTpl;
+    u32 oA = is_be ? __builtin_bswap32(data->ofsAnm) : data->ofsAnm;
+
+    TexIdTbl* ids = (TexIdTbl*) (base + oI);
+    TexOfsTbl* tpls = (TexOfsTbl*) (base + oT);
+    TexOfsTbl* anms = (TexOfsTbl*) (base + oA);
+
+    u32 num = is_be ? __builtin_bswap32(ids->num) : ids->num;
+    for (u32 i = 0; i < num; i++) {
+        u32 t_ofs = is_be ? __builtin_bswap32(tpls->ofs[i]) : tpls->ofs[i];
+        u32 a_ofs = is_be ? __builtin_bswap32(anms->ofs[i]) : anms->ofs[i];
+        TEXPalette* tpl = (TEXPalette*) ((u8*) tpls + t_ofs);
+        TexAnm* anm = (TexAnm*) ((u8*) anms + a_ofs);
+        u16 id = is_be ? __builtin_bswap16(ids->ent[i].id) : ids->ent[i].id;
+        TexRegist(tpl, anm, id, owner, clamp, 1);
+    }
+    return 1;
+#else
     TexIdTbl* ids;
     TexOfsTbl* tpls;
     TexOfsTbl* anms;
@@ -95,8 +129,8 @@ int cTexSys::DataLoad(TexData* data, u32 owner, int clamp)
     // temporaries r9/r11/r0 (ofsId/ofsTpl/ofsAnm), ours r0/r9/r0: a fake-lifetime tie decided by
     // the sched1 position of the third `lwz` (30 statement/base/order forms tried); the two pins
     // give the target's names with the same schedule.
-    register u32 oI asm("r9");
-    register u32 oT asm("r11");
+    register u32 oI;
+    register u32 oT;
 
     if (data->version != 3) {
         pLog->err(0, 0, "%s::DataLoad() : Data Invalid. [0x%x]", m_name, data);
@@ -114,6 +148,7 @@ int cTexSys::DataLoad(TexData* data, u32 owner, int clamp)
         TexRegist(tpl, anm, id, owner, clamp, 1);
     }
     return 1;
+#endif
 }
 
 // `num` consecutive free pool objects, marked in use; NULL when the pool is full.
@@ -149,10 +184,128 @@ done:
     return obj;
 }
 
+#pragma pack(push, 1)
+struct TPL_Disc_Desc {
+    u32 texHeaderOfs;
+    u32 clutHeaderOfs;
+};
+
+struct TPL_Disc_TexHeader {
+    u16 height;
+    u16 width;
+    u32 format;
+    u32 dataOfs;
+    u32 wrapS;
+    u32 wrapT;
+    u32 minFilter;
+    u32 magFilter;
+    f32 LODBias;
+    u8 edgeLODEnable;
+    u8 minLOD;
+    u8 maxLOD;
+    u8 unpacked;
+};
+
+struct TPL_Disc_ClutHeader {
+    u16 numEntries;
+    u8 unpacked;
+    u8 pad8;
+    u32 format;
+    u32 dataOfs;
+};
+#pragma pack(pop)
+
+void UnpackTplNative(TEXPalette* tpl)
+{
+    if (tpl == NULL) {
+        return;
+    }
+    if (tpl->version == 0x12345678) {
+        return;
+    }
+
+    bool is_big_endian = (tpl->version == 0x30AF2000 || tpl->version == 0x0020AF30);
+    u32 numDescriptors = tpl->numDescriptors;
+    u32 desc_ofs = (u32)(uintptr_t)tpl->descriptorArray;
+    if (tpl->version == 0x30AF2000) {
+        numDescriptors = __builtin_bswap32(numDescriptors);
+        desc_ofs = __builtin_bswap32(desc_ofs);
+    }
+
+    TEXDescriptor* native_descs = (TEXDescriptor*) calloc(numDescriptors, sizeof(TEXDescriptor));
+    u8* base = (u8*) tpl;
+    TPL_Disc_Desc* disc_descs = (TPL_Disc_Desc*) (base + desc_ofs);
+
+    for (u32 i = 0; i < numDescriptors; i++) {
+        u32 th_ofs = disc_descs[i].texHeaderOfs;
+        u32 clut_ofs = disc_descs[i].clutHeaderOfs;
+        if (tpl->version == 0x30AF2000) {
+            th_ofs = __builtin_bswap32(th_ofs);
+            clut_ofs = __builtin_bswap32(clut_ofs);
+        }
+
+        if (th_ofs != 0) {
+            TPL_Disc_TexHeader* dth = (TPL_Disc_TexHeader*) (base + th_ofs);
+            TEXHeader* th = (TEXHeader*) calloc(1, sizeof(TEXHeader));
+            if (tpl->version == 0x30AF2000) {
+                th->height = __builtin_bswap16(dth->height);
+                th->width = __builtin_bswap16(dth->width);
+                th->format = __builtin_bswap32(dth->format);
+                u32 dataOfs = __builtin_bswap32(dth->dataOfs);
+                th->data = base + dataOfs;
+                th->wrapS = __builtin_bswap32(dth->wrapS);
+                th->wrapT = __builtin_bswap32(dth->wrapT);
+                th->minFilter = __builtin_bswap32(dth->minFilter);
+                th->magFilter = __builtin_bswap32(dth->magFilter);
+                th->LODBias = dth->LODBias;
+            } else {
+                th->height = dth->height;
+                th->width = dth->width;
+                th->format = dth->format;
+                th->data = base + dth->dataOfs;
+                th->wrapS = dth->wrapS;
+                th->wrapT = dth->wrapT;
+                th->minFilter = dth->minFilter;
+                th->magFilter = dth->magFilter;
+                th->LODBias = dth->LODBias;
+            }
+            th->edgeLODEnable = dth->edgeLODEnable;
+            th->minLOD = dth->minLOD;
+            th->maxLOD = dth->maxLOD;
+            th->unpacked = 1;
+            native_descs[i].textureHeader = th;
+        }
+
+        if (clut_ofs != 0) {
+            TPL_Disc_ClutHeader* dclut = (TPL_Disc_ClutHeader*) (base + clut_ofs);
+            CLUTHeader* clut = (CLUTHeader*) calloc(1, sizeof(CLUTHeader));
+            if (tpl->version == 0x30AF2000) {
+                clut->numEntries = __builtin_bswap16(dclut->numEntries);
+                clut->format = (GXTlutFmt) __builtin_bswap32(dclut->format);
+                u32 cdataOfs = __builtin_bswap32(dclut->dataOfs);
+                clut->data = base + cdataOfs;
+            } else {
+                clut->numEntries = dclut->numEntries;
+                clut->format = (GXTlutFmt) dclut->format;
+                clut->data = base + dclut->dataOfs;
+            }
+            clut->unpacked = 1;
+            native_descs[i].CLUTHeader = clut;
+        }
+    }
+
+    tpl->numDescriptors = numDescriptors;
+    tpl->descriptorArray = native_descs;
+    tpl->version = 0x12345678;
+}
+
 // Relocates a TPL's offsets into pointers (once: skipped when the descriptor pointer is already a
 // real address).
 void cTexSys::CalcTplAddr(TEXPalette* tpl)
 {
+#if defined(OPENRE4_NATIVE)
+    UnpackTplNative(tpl);
+#else
     u32 i;
     TEXDescriptor* desc;
 
@@ -172,6 +325,7 @@ void cTexSys::CalcTplAddr(TEXPalette* tpl)
             desc->CLUTHeader->data = (u8*) tpl + (u32) desc->CLUTHeader->data;
         }
     }
+#endif
 }
 
 // Registers texture `id`: pool objects for the animation's frame count, one GX texture object per
@@ -193,7 +347,14 @@ int cTexSys::TexRegist(TEXPalette* tpl, TexAnm* anm, u8 id, u32 owner, int clamp
     }
     CalcTplAddr(tpl);
     desc = TEXGet(tpl, 0);
-    w->nTexObj = anm->numTex;
+    u16 nTex = anm->numTex;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (nTex > 255) {
+        nTex = __builtin_bswap16(nTex);
+        anm->numTex = nTex;
+    }
+#endif
+    w->nTexObj = nTex;
     w->pTex_obj_start = PullTexObj(w->nTexObj);
     if (w->pTex_obj_start == NULL) {
         pLog->err(0, 0, "%s : ID[%02x] PullTexObj() work full!!", m_name, id);

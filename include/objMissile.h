@@ -25,7 +25,7 @@ struct FREE_MISSILE {
 // toward its target and explodes on the scenario / an enemy (R0_Fire, objMissileBomb).
 class cObjMissile : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_MISSILE
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_MISSILE
 
     virtual void move();
     virtual ~cObjMissile() {}

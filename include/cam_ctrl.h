@@ -18,6 +18,48 @@ class cModel;
 // File offsets are relocated to pointers by CameraControl::calcAddr.
 // ---------------------------------------------------------------------------
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+struct _AREA_DATA {  // hit area
+    u8 Be_flag;    // 0x00
+    s8 No;         // 0x01
+    s8 Suffix;     // 0x02
+    u8 Attr;       // 0x03  bit 4 = ?, bit 8 = ?, 0x20 set from 8 by calcAddr, 0x40 = check dir, 0x80 = no light update
+    f32 Dir;       // 0x04  facing angle the player must have (Attr & 0x40)
+    u8 Type_char;  // 0x08  matched against battle/state attribute
+    u8 Type_addr;  // 0x09  t_camera TC_AREA_DATA::attr3; 0xFF = none
+    u8 dummy[0x20 - 0x0A];
+    f32 Height;    // 0x20
+    f32 Y;         // 0x24
+    s32 nVer;      // 0x28  polygon vertex count
+    Ptr32<Vec> pVer;     // 0x2C
+};
+typedef _AREA_DATA AREA_DATA;
+
+struct _CUT_INFO {  // area -> cut link
+    u8 Attr;              // 0x00  camera type of the linked cut (t_camera tcTypeTbl)
+    u8 dummy[7];
+    Ptr32<AREA_DATA> pAdat;     // 0x08
+    Ptr32<CAMERA_DATA> pCdat;   // 0x0C
+};
+typedef _CUT_INFO CUT_INFO;
+
+struct _CAMERA_DATA {
+    u8 Be_flag;      // 0x00
+    s8 No;           // 0x01
+    s8 Id;           // 0x02  CameraControl state selector
+    u8 Attr;         // 0x03  bit 0: offset valid
+    Vec offset;      // 0x04  added to the player position to get the aim point
+    Ptr32<u16> pFrame;     // 0x10  key frame times
+    f32 floor_ratio; // 0x14  shoulder camera floor ratio (cam_qfps setAreaData)
+    u8 dummy[0x20 - 0x18];
+    s32 nPoint;      // 0x20  key count
+    Ptr32<Vec> pCampos;    // 0x24
+    Ptr32<Vec> pTarget;    // 0x28
+    Ptr32<f32> pRoll;      // 0x2C
+    Ptr32<f32> pFovy;      // 0x30
+};
+typedef _CAMERA_DATA CAMERA_DATA;
+#else
 struct _AREA_DATA {  // hit area
     u8 Be_flag;    // 0x00
     s8 No;         // 0x01
@@ -58,6 +100,7 @@ struct _CAMERA_DATA {
     f32* pFovy;      // 0x30
 };
 typedef _CAMERA_DATA CAMERA_DATA;
+#endif
 
 struct _LERP_DATA {
     u8 Be_flag;    // 0x00

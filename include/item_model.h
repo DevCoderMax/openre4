@@ -18,7 +18,7 @@ private:
     void WorkClear();
 public:
     void Init();
-    int DataLoad(u32 data_addr);
+    int DataLoad(uintptr_t data_addr);
     int ItmRegist(void* bin, void* tpl, u8 no);
     int GetBinAddr(u8 id, void** pBin_addr);
     int GetTplAddr(u8 id, void** pTpl_addr);

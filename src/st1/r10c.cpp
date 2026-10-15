@@ -86,7 +86,7 @@ static void r10c_StrCheck();
 static void r10c_ThunderFlagOn();
 static void r10c_ThunderFlagOff();
 static void r10c_ThunderMove();
-void setTexRender();
+static void setTexRender();
 int SwitchExec(cObj* obj, f32* spd, int no, f32 lim, f32 cur);
 static void chkSwitchA_exit();
 static void chkSwitchA();
@@ -492,7 +492,7 @@ static void r10c_ThunderMove()
     obj->Refract_ratio = v138;
 
 // The water surface: a render target blended into the water objects.
-void setTexRender()
+static void setTexRender()
 {
     cObj* obj;
     u8* tbl = r10c_texTbl;

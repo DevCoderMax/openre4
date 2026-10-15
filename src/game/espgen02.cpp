@@ -127,7 +127,7 @@ void espgen02_Update(cEspgen* pEspgen)
     f32 spdR = 0.0f;
     // COMPILER-DIFF: #17. colR pinned to f24 (global-alloc order of the three 0.0f copies); no
     // code is emitted.
-    register f32 colR asm("fr24");
+    register f32 colR;
     int bScale = 0;
     scaleR = spdR;
     colR = spdR;

@@ -29,6 +29,23 @@ void FlrAtInit()
     if (strcmp((char*) p, "FSE") != 0) {
         return;
     }
+#if defined(OPENRE4_NATIVE)
+    if (p->version == 0x0301) {
+        p->version = __builtin_bswap16(p->version);
+        p->num = __builtin_bswap16(p->num);
+        FLR_AT_DATA* d = (FLR_AT_DATA*) (p + 1);
+        for (u32 i = 0; i < p->num; i++) {
+            AreaHitDataConvertEndian(&d[i].area);
+            if (d[i].type == 2) {
+                d[i].bgmctrl.time[0] = (int) __builtin_bswap32((u32) d[i].bgmctrl.time[0]);
+                d[i].bgmctrl.time[1] = (int) __builtin_bswap32((u32) d[i].bgmctrl.time[1]);
+                d[i].bgmctrl.str_blk = __builtin_bswap16(d[i].bgmctrl.str_blk);
+                d[i].bgmctrl.str_no = __builtin_bswap16(d[i].bgmctrl.str_no);
+                d[i].bgmctrl.str_fade_time = __builtin_bswap32(d[i].bgmctrl.str_fade_time);
+            }
+        }
+    }
+#endif
     if (p->version != 0x103) {
         pLog->warn(0, 0, "FlrAt DATA IS OLD VERSION");
         return;

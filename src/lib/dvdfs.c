@@ -149,6 +149,36 @@ s32 DVDConvertPathToEntrynum(const char* pathPtr) {
             }
         }
         
+        if (!isDir && length >= 4) {
+            char altName[128];
+            if (length < sizeof(altName) - 1) {
+                memcpy(altName, ptr, length);
+                altName[length] = '\0';
+                if ((altName[length - 4] == '.') &&
+                    ((altName[length - 3] == 'd' || altName[length - 3] == 'D')) &&
+                    ((altName[length - 2] == 'a' || altName[length - 2] == 'A')) &&
+                    ((altName[length - 1] == 's' || altName[length - 1] == 'S'))) {
+                    altName[length - 3] = 'd';
+                    altName[length - 2] = 'r';
+                    altName[length - 1] = 's';
+                } else if ((altName[length - 4] == '.') &&
+                    ((altName[length - 3] == 'd' || altName[length - 3] == 'D')) &&
+                    ((altName[length - 2] == 'r' || altName[length - 2] == 'R')) &&
+                    ((altName[length - 1] == 's' || altName[length - 1] == 'S'))) {
+                    altName[length - 3] = 'd';
+                    altName[length - 2] = 'a';
+                    altName[length - 1] = 's';
+                }
+                for (i = dirLookAt + 1; i < nextDir(dirLookAt); i = entryIsDir(i) ? nextDir(i) : (i + 1)) {
+                    if (entryIsDir(i)) continue;
+                    stringPtr = FstStringStart + stringOff(i);
+                    if (isSame(altName, stringPtr) == TRUE) {
+                        goto next_hier;
+                    }
+                }
+            }
+        }
+
         return -1;
     
 next_hier:

@@ -7,6 +7,20 @@
 extern "C" {
 #endif
 
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+typedef void (*ARQCallback)(uintptr_t pointerToARQRequest);
+
+struct ARQRequest {
+    /* 0x00 */ struct ARQRequest *next;
+    /* 0x08 */ uintptr_t owner;
+    /* 0x10 */ u32 type;
+    /* 0x14 */ u32 priority;
+    /* 0x18 */ uintptr_t source;
+    /* 0x20 */ uintptr_t dest;
+    /* 0x28 */ u32 length;
+    /* 0x30 */ ARQCallback callback;
+};
+#else
 typedef void (*ARQCallback)(u32 pointerToARQRequest);
 
 struct ARQRequest {
@@ -19,6 +33,7 @@ struct ARQRequest {
     /* 0x18 */ u32 length;
     /* 0x1C */ ARQCallback callback;
 };
+#endif
 
 #define ARQ_DMA_ALIGNMENT 32
 
@@ -56,9 +71,14 @@ void ARClear(u32 flag);
 // ARQ
 void ARQInit(void);
 void ARQReset(void);
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+void ARQPostRequest(ARQRequest* request, uintptr_t owner, u32 type, u32 priority, uintptr_t source, uintptr_t dest, u32 length, ARQCallback callback);
+void ARQRemoveOwnerRequest(uintptr_t owner);
+#else
 void ARQPostRequest(ARQRequest* request, u32 owner, u32 type, u32 priority, u32 source, u32 dest, u32 length, ARQCallback callback);
-void ARQRemoveRequest(ARQRequest* request);
 void ARQRemoveOwnerRequest(u32 owner);
+#endif
+void ARQRemoveRequest(ARQRequest* request);
 void ARQFlushQueue(void);
 void ARQSetChunkSize(u32 size);
 u32 ARQGetChunkSize(void);

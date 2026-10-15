@@ -51,7 +51,7 @@ struct OBJ04_FREE {
 // scenario/floor, following its parent until `rotFrame`.
 class cObj04 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  OBJ04_FREE
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  OBJ04_FREE
 
     virtual void move();
 };

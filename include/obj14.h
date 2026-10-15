@@ -18,7 +18,7 @@ struct FREE_OBJ14 {
 // pG for 90 frames) and setBreak() lets it fall.
 class cObjBell : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ14
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ14
 
     virtual void move();
 

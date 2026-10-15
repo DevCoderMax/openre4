@@ -655,13 +655,13 @@ f32 IPOW(f32 x, int y)
 // Fast reciprocal-square-root based sqrt (one Newton step), as the SDK inline asm.
 f32 SQRTF(f32 x)
 {
-    f32 half = 0.5f;
-    f32 three = 3.0f;
-    f32 r;
-
     if (x <= 0.00001f) {
         return 0.0f;
     }
+#if defined(__powerpc__) || defined(__ppc__)
+    f32 half = 0.5f;
+    f32 three = 3.0f;
+    f32 r;
     asm("frsqrte 2, %1\n\t"
         "fmuls 3, 2, 2\n\t"
         "fmuls 4, 2, %2\n\t"
@@ -672,6 +672,9 @@ f32 SQRTF(f32 x)
         : "f"(x), "f"(half), "f"(three)
         : "fr2", "fr3", "fr4");
     return r;
+#else
+    return __builtin_sqrtf(x);
+#endif
 }
 
 // Unused accuracy test of SINF/COSF (its strings survive in .rodata).
@@ -715,6 +718,7 @@ f32 sum[2] = {0.0f, 0.0f};
 // sin(x) by a paired-single Taylor series after wrapping x into [-PI, PI).
 f32 SINF(f32 x)
 {
+#if defined(__powerpc__) || defined(__ppc__)
     f32 r;
 
     x = LIMIT_ANGLE(x);
@@ -747,11 +751,15 @@ f32 SINF(f32 x)
         : "f"(x)
         : "r9", "r10", "r11", "fr2", "fr3", "fr4", "fr5");
     return r;
+#else
+    return sinf(x);
+#endif
 }
 
 // cos(x) by the same series.
 f32 COSF(f32 x)
 {
+#if defined(__powerpc__) || defined(__ppc__)
     f32 r;
 
     x = LIMIT_ANGLE(x + 1.5707964f);
@@ -784,11 +792,15 @@ f32 COSF(f32 x)
         : "f"(x)
         : "r9", "r10", "r11", "fr2", "fr3", "fr4", "fr5");
     return r;
+#else
+    return cosf(x);
+#endif
 }
 
 // Wrap an angle into [-PI, PI) (SDK-style inline asm loop).
 f32 LIMIT_ANGLE(f32 x)
 {
+#if defined(__powerpc__) || defined(__ppc__)
     f32 min = -PI;
     f32 max = PI;
     f32 step = PI2;
@@ -812,4 +824,9 @@ f32 LIMIT_ANGLE(f32 x)
         : "f"(min), "f"(max), "f"(step)
         : "cr0");
     return x;
+#else
+    while (x >= PI) x -= PI2;
+    while (x < -PI) x += PI2;
+    return x;
+#endif
 }

@@ -5,10 +5,8 @@
 #include <new>
 #include "db_log.h"
 
-extern "C" {
-int sprintf(char* buf, const char* fmt, ...);
-int strcmp(const char* a, const char* b);
-}
+#include <stdio.h>
+#include <string.h>
 
 // game/xml.cpp: minimal XML reader/writer used by the debug tools (XSDSchemaSof documents).
 // Member functions do not touch `this`; `buf`/`out` are caller-provided character buffers.

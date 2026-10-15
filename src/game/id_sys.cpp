@@ -15,6 +15,7 @@
 #include <dolphin/os.h>
 #include "path.h"
 #include "trans.h"
+#include "hermite.h"
 
 
 Mtx IDSystem::m_scrn_mat;
@@ -34,7 +35,51 @@ struct IdBlend2 {
 
 // Bit tables indexed by table type (ck / disp).
 static inline int IdBitChk(u32* tbl, u8 n) { return FlagChkVar(tbl, (u32) n) ? 1 : 0; }
+
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#define ID_UNIT(i) (&m_IdUnit[(i)])
+
+static inline f32 id_swap_f32(f32 val) {
+    union { f32 f; u32 u; } conv;
+    conv.f = val;
+    conv.u = __builtin_bswap32(conv.u);
+    return conv.f;
+}
+
+static inline Vec id_swap_vec(Vec v) {
+    Vec res;
+    res.x = id_swap_f32(v.x);
+    res.y = id_swap_f32(v.y);
+    res.z = id_swap_f32(v.z);
+    return res;
+}
+
+static inline void id_unpack_curve(HERMITE_1_PTR* pCurve) {
+    if (!pCurve) return;
+    if ((u32) pCurve->nPoint > 0x000000FF) {
+        s32 n = __builtin_bswap32(pCurve->nPoint);
+        pCurve->nPoint = n;
+        for (s32 i = 0; i < n; i++) {
+            pCurve->Point[i].T = id_swap_f32(pCurve->Point[i].T);
+            pCurve->Point[i].Q = id_swap_f32(pCurve->Point[i].Q);
+            pCurve->Point[i].dQ[0] = id_swap_f32(pCurve->Point[i].dQ[0]);
+            pCurve->Point[i].dQ[1] = id_swap_f32(pCurve->Point[i].dQ[1]);
+        }
+    }
+}
+
+static inline void id_unpack_path(FUNC_PATH_PTR* pPath) {
+    if (!pPath) return;
+    if (pPath->pad_1[0] != 0x55) {
+        for (int i = 0; i < pPath->nPoint; i++) {
+            pPath->Point[i] = id_swap_vec(pPath->Point[i]);
+        }
+        pPath->pad_1[0] = 0x55;
+    }
+}
+#else
 #define ID_UNIT(i) ((ID_UNIT*) ((i) * sizeof(ID_UNIT) + (u32) m_IdUnit))
+#endif
 
 // Allocates the pool of n IdUnits (memory group 13) and clears it.
 void IDSystem::gameInit(int maxId)
@@ -241,6 +286,15 @@ void IDSystem::set(ID_FILE_HEADER* data, u8 markNo, ID_CLASS classNo, u8 otType,
                     u->size_flag = p1->scaleType;
                     u->rot_flag = p1->rotAxis;
                     u->rev_flag = p1->dir;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+                    u->pos0 = id_swap_vec(p1->pos);
+                    u->ver[0] = id_swap_vec(p1->vtx[0]);
+                    u->ver[1] = id_swap_vec(p1->vtx[1]);
+                    u->ver[2] = id_swap_vec(p1->vtx[2]);
+                    u->ver[3] = id_swap_vec(p1->vtx[3]);
+                    u->size_W = id_swap_f32(p1->sizeX);
+                    u->size_H = id_swap_f32(p1->sizeY);
+#else
                     u->pos0 = p1->pos;
                     u->ver[0] = p1->vtx[0];
                     u->ver[1] = p1->vtx[1];
@@ -248,6 +302,7 @@ void IDSystem::set(ID_FILE_HEADER* data, u8 markNo, ID_CLASS classNo, u8 otType,
                     u->ver[3] = p1->vtx[3];
                     u->size_W = p1->sizeX;
                     u->size_H = p1->sizeY;
+#endif
                     u->col0[0] = p1->col0[0];
                     u->col0[1] = p1->col0[1];
                     u->col0[2] = p1->col0[2];
@@ -256,12 +311,34 @@ void IDSystem::set(ID_FILE_HEADER* data, u8 markNo, ID_CLASS classNo, u8 otType,
                     u->col1[1] = 0;
                     u->col1[2] = 0;
                     u->col1[3] = 0;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+                    u->rot0 = id_swap_vec(p1->rot);
+#else
                     u->rot0 = p1->rot;
+#endif
                     u->blend_type = p1->blendType;
                     u->trans_type = p1->transType;
                     u->maskId = p1->maskId;
                     u->tex_flag = p1->flags_7F;
                     u->pow = p1->transSub;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+                    for (int k = 0; k < 6; k++) {
+                        u32 ofs = p1->ofs[k];
+                        if (ofs > 0x00FFFFFF) {
+                            ofs = __builtin_bswap32(ofs);
+                        }
+                        void* ptr = ofs ? (void*) ((u8*) data + ofs) : NULL;
+                        if (k == 0) {
+                            u->path0 = ptr;
+                            id_unpack_path((FUNC_PATH_PTR*) ptr);
+                        } else if (k == 1) {
+                            u->path1 = ptr;
+                        } else {
+                            u->curve[k - 2] = (HERMITE_1_PTR*) ptr;
+                            id_unpack_curve((HERMITE_1_PTR*) ptr);
+                        }
+                    }
+#else
                     a = p1->ofs[0];
                     if (a) {
                         u->path0 = (void*) (a + (u32) data);
@@ -298,6 +375,7 @@ void IDSystem::set(ID_FILE_HEADER* data, u8 markNo, ID_CLASS classNo, u8 otType,
                     } else {
                         u->curve[3] = 0;
                     }
+#endif
                     c = 0;
                     if (!DbgFlagChk(pG, DBG_TEST_MODE)) {
                         u->be_flag |= 0xD;
@@ -349,6 +427,15 @@ void IDSystem::set(ID_FILE_HEADER* data, u8 markNo, ID_CLASS classNo, u8 otType,
                     u->size_flag = p2->scaleType;
                     u->rot_flag = p2->rotAxis;
                     u->rev_flag = p2->dir;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+                    u->pos0 = id_swap_vec(p2->pos);
+                    u->ver[0] = id_swap_vec(p2->vtx[0]);
+                    u->ver[1] = id_swap_vec(p2->vtx[1]);
+                    u->ver[2] = id_swap_vec(p2->vtx[2]);
+                    u->ver[3] = id_swap_vec(p2->vtx[3]);
+                    u->size_W = id_swap_f32(p2->sizeX);
+                    u->size_H = id_swap_f32(p2->sizeY);
+#else
                     u->pos0 = p2->pos;
                     u->ver[0] = p2->vtx[0];
                     u->ver[1] = p2->vtx[1];
@@ -356,6 +443,7 @@ void IDSystem::set(ID_FILE_HEADER* data, u8 markNo, ID_CLASS classNo, u8 otType,
                     u->ver[3] = p2->vtx[3];
                     u->size_W = p2->sizeX;
                     u->size_H = p2->sizeY;
+#endif
                     u->col0[0] = p2->col0[0];
                     u->col0[1] = p2->col0[1];
                     u->col0[2] = p2->col0[2];
@@ -364,12 +452,34 @@ void IDSystem::set(ID_FILE_HEADER* data, u8 markNo, ID_CLASS classNo, u8 otType,
                     u->col1[1] = p2->col1[1];
                     u->col1[2] = p2->col1[2];
                     u->col1[3] = p2->col1[3];
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+                    u->rot0 = id_swap_vec(p2->rot);
+#else
                     u->rot0 = p2->rot;
+#endif
                     u->blend_type = p2->blendType;
                     u->trans_type = p2->transType;
                     u->maskId = p2->maskId;
                     u->tex_flag = p2->flags_7F;
                     u->pow = p2->transSub;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+                    for (int k = 0; k < 6; k++) {
+                        u32 ofs = p2->ofs[k];
+                        if (ofs > 0x00FFFFFF) {
+                            ofs = __builtin_bswap32(ofs);
+                        }
+                        void* ptr = ofs ? (void*) ((u8*) data + ofs) : NULL;
+                        if (k == 0) {
+                            u->path0 = ptr;
+                            id_unpack_path((FUNC_PATH_PTR*) ptr);
+                        } else if (k == 1) {
+                            u->path1 = ptr;
+                        } else {
+                            u->curve[k - 2] = (HERMITE_1_PTR*) ptr;
+                            id_unpack_curve((HERMITE_1_PTR*) ptr);
+                        }
+                    }
+#else
                     a = p2->ofs[0];
                     if (a) {
                         u->path0 = (void*) (a + (u32) data);
@@ -406,6 +516,7 @@ void IDSystem::set(ID_FILE_HEADER* data, u8 markNo, ID_CLASS classNo, u8 otType,
                     } else {
                         u->curve[3] = 0;
                     }
+#endif
                     c = 0;
                     if (!DbgFlagChk(pG, DBG_TEST_MODE)) {
                         u->be_flag |= 0xD;
@@ -1504,4 +1615,6 @@ void* g_pIdBuff = 0;
 int IdBuffType;
 
 // The split object's .sdata is 8-aligned (the linker pads 0x80314BB4 -> 0x80314BB8 before it).
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

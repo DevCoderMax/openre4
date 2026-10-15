@@ -805,7 +805,7 @@ static void door5_close()
         f32 nz;                                                                                                    \
         void* motPl;                                                                                               \
         void* motCh;                                                                                               \
-        register cModel* mdl asm("r30"); /* COMPILER-DIFF: candidate #17 */                                        \
+        register cModel* mdl; /* COMPILER-DIFF: candidate #17 */                                        \
         Vec* ang;                                                                                                  \
                                                                                                                    \
         pl->beginEvent(0);                                                                     \

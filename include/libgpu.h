@@ -115,6 +115,10 @@ void AddPrim(u32* pOt, u32* pWk);
 void DelPrim(u32* pOt, u32* pWk);
 void ClearOTagR(u32* pOt, int n);
 void DrawOTag(u32* pOt);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+void* OtLookup(u32 tag);
+u32 OtRegister(void* ptr, bool is_prim);
+#endif
 #ifdef __cplusplus
 #endif
 

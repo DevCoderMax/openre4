@@ -40,7 +40,7 @@ struct FREE_OBJ13 {
 // falls with a damage area (R1_Fall) and breaks the windows it lands on (breakWindow).
 class cObjLadder : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ13
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ13
 
     virtual void move();
     virtual ~cObjLadder() {}

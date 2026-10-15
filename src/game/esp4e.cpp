@@ -218,4 +218,6 @@ int cEsp4e::SetFreeWork(cEspSeqTbl* pSeq, u32* pRand_seed)
     return 1;
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

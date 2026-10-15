@@ -41,6 +41,7 @@ void TaskSchedulerInit()
         Task[i].Status = 0;
         Task[i].pStack = stack + Task[i].StackSize;
         Task[i].suspend_cnt = 0;
+        *(u32*) (Task[i].pStack - Task[i].StackSize) = 0xDEADBABE;
         OSInitThreadQueue(&Task[i].Queue);
         stack = Task[i].pStack;
     }
@@ -175,6 +176,7 @@ void* TaskExec_hook(void* value)
     if (pParentThread != NULL) {
         OSSuspendThread(pParentThread);
     }
+#if defined(__powerpc__) || defined(__ppc__)
     asm("li 3, 4\n"
         "oris 3, 3, 4\n"
         "mtspr 914, 3\n"
@@ -190,8 +192,13 @@ void* TaskExec_hook(void* value)
         :
         :
         : "r3");
+#endif
     GXSetCurrentGXThread();
-    pCTask->pFunc((int) value);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    pCTask->pFunc(value);
+#else
+    pCTask->pFunc((int)(uintptr_t) value);
+#endif
     return NULL;
 }
 
@@ -207,7 +214,11 @@ TASK* TaskExec(int prio, TaskFunc func, void* arg)
     }
     t = &Task[prio];
     t->hook = TaskExec_hook;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    t->pFunc = (void (*)(void*)) func;
+#else
     t->pFunc = (void (*)(int)) func;
+#endif
     t->Status = TASK_EXEC;
     t->arg = arg;
     t->setKind(6);
@@ -242,7 +253,11 @@ void TaskSleep(int ctr)
 void TaskChain(TaskFunc func, void* arg)
 {
     pCTask->hook = TaskExec_hook;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    pCTask->pFunc = (void (*)(void*)) func;
+#else
     pCTask->pFunc = (void (*)(int)) func;
+#endif
     pCTask->Status = TASK_EXEC;
     pCTask->arg = arg;
     if (pParentThread != NULL) {

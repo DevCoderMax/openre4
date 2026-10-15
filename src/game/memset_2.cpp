@@ -1,7 +1,24 @@
-/* Capcom's hand-written fill helpers (game/memset_2): word-fill in 16-byte blocks when the destination
- * is word aligned, byte tail otherwise; mtxclr_asm zeroes 3x4 float matrices. Assembly in the original
- * (the debug build has the unit as Capcom asm, the byte patterns show no compiler idiom); the functions
- * are whole-function asm() bodies, reproduced from the split object. */
+#include "types.h"
+#include <string.h>
+
+#if !defined(__powerpc__) && !defined(__ppc__)
+
+extern "C" {
+void memset_asm(void *dst, int c, u32 n) {
+    memset(dst, c, n);
+}
+
+void memclr_asm(void *dst, u32 n) {
+    memset(dst, 0, n);
+}
+
+void mtxclr_asm(void *dst, u32 count) {
+    memset(dst, 0, count * 12 * sizeof(float));
+}
+}
+
+#else
+
 #include "asm_regs.h"
 
 asm("	.text\n"
@@ -96,3 +113,5 @@ asm("	.globl mtxclr_asm\n"
     "	bdnz mtx_clr\n"
     "	blr\n"
     "	.size mtxclr_asm,.-mtxclr_asm\n");
+
+#endif

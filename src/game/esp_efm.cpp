@@ -770,4 +770,6 @@ void setModTexRender(cObj* pMod, int no)
 }
 
 // .sdata alignment padding of the split object
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

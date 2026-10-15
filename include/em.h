@@ -158,8 +158,11 @@ public:
     int initWork();              // be_flag = 0x21, x12E = 0 (the constructor)
 };
 
-// One work per enemy: the manager's stride is the largest enemy class, cEm plus its free area.
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#define EM_WORK_SIZE 0x2000
+#else
 #define EM_WORK_SIZE 0xDE0
+#endif
 
 // The routine bytes written all at once, in the single stw the original emits at some sites (four
 // separate byte stores do not reproduce it). A macro, not an inline: an inline defined here would

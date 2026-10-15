@@ -68,7 +68,11 @@ void PadRead()
     // `dead` would outrank the loop-2 `&Pad_data` hoist in global alloc and take r17 (target r16),
     // so it is pinned. The codeless barrier after it makes every later insn depend on it, so
     // `li r16,10` issues before `lis Pad_data@ha` like the target.
-    register int dead asm("r16");                // COMPILER-DIFF: #17
+#if defined(__powerpc__) || defined(__ppc__)
+    register int dead;                // COMPILER-DIFF: #17
+#else
+    int dead;
+#endif
 
     dead = 10;
     asm volatile("");                            // COMPILER-DIFF: #13 (sched barrier, no code)
@@ -421,7 +425,7 @@ void VibSetData(VibDataTbl* t, u32 no, u32 type)
 {
     u32* ofs = t->ofs;
     if (no < t->num && ofs[no]) {
-        VibSetDataCore((VIB_INFO*) (ofs[no] + (u32) t), type);
+        VibSetDataCore((VIB_INFO*) ((u8*) t + ofs[no]), type);
     }
 }
 
@@ -466,4 +470,6 @@ void Pad_test()
 }
 
 // The split object's .rodata is 8-aligned and 4 bytes longer (padding after the last string).
+#ifndef OPENRE4_NATIVE
 asm(".section .rodata; .balign 8");
+#endif

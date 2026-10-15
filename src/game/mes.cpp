@@ -176,6 +176,9 @@ void MessageFont::create(int char_w, int char_h, TEXPalette* addr, u8* size)
     FONT_TEX* t;
 
     m_tpl = addr;
+#if defined(OPENRE4_NATIVE)
+    UnpackTplNative(addr);
+#else
     if ((s32) addr->descriptorArray >= 0) {
         addr->descriptorArray = (TEXDescriptor*) ((u32) addr->descriptorArray + (u32) addr);
         d = addr->descriptorArray;
@@ -192,6 +195,7 @@ void MessageFont::create(int char_w, int char_h, TEXPalette* addr, u8* size)
             }
         }
     }
+#endif
     d = m_tpl->descriptorArray;
     t = m_mTex;
     for (i = 0; i < m_tpl->numDescriptors; i++, d++, t++) {
@@ -338,7 +342,16 @@ void MessageControl::setLanguage(int lang)
 void MessageControl::setupFont(int char_w, int char_h, u8* addr, int no)
 {
     m_font_addr[no] = addr;
-    MesFont[no].create(char_w, char_h, (TEXPalette*) (addr + *(u32*) addr), addr + *(u32*) (addr + 4));
+#if defined(OPENRE4_NATIVE)
+    u32 tpl_ofs = *(u32*) addr;
+    if (tpl_ofs > 0x100000) tpl_ofs = __builtin_bswap32(tpl_ofs);
+    u32 width_ofs = *(u32*) (addr + 4);
+    if (width_ofs > 0x100000) width_ofs = __builtin_bswap32(width_ofs);
+#else
+    u32 tpl_ofs = *(u32*) addr;
+    u32 width_ofs = *(u32*) (addr + 4);
+#endif
+    MesFont[no].create(char_w, char_h, (TEXPalette*) (addr + tpl_ofs), addr + width_ofs);
 }
 
 // Destroys font slot `no`.

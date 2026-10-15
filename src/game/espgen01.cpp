@@ -396,4 +396,6 @@ int Espgen01_SetFreeWork(cEspgen* w, cEspSeqTbl* rec, cEspSeqHead* head, cModel*
     return 1;
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

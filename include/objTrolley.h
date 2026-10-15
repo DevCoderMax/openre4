@@ -23,7 +23,7 @@ struct FREE_TROLLEY {
 // car are carried along, the break routine throws them off.
 class cObjTrolley : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_TROLLEY
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_TROLLEY
 
     virtual void move();
     virtual ~cObjTrolley() {}

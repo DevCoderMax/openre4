@@ -90,7 +90,7 @@ void em21DmCk(cEm21* em)
         case DMG_TYPE_ENV_FIRE:
             mode = em->set;
             {
-                register int c asm("r9"); // COMPILER-DIFF: #13
+                register int c; // COMPILER-DIFF: #13
                 c = 0x1E;
                 em->dmg.m_Timer = c;
             }

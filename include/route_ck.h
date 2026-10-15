@@ -34,6 +34,7 @@ struct RTP {
     u32 pNext;      // 0x14  s8 next[nPoint][nPoint]: next hop from row to column, -1 = unreachable
 };
 
+void RtpConvertEndian(RTP* r);
 void RouteCk();
 // Next position for `em` on its way to `target`; returns 1 when the target itself is reachable.
 int RouteCkToEm(cEm* pMy, cEm* pTo, Vec* pDest, int mode);

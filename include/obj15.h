@@ -36,7 +36,7 @@ struct FREE_OBJ15 {
 // frame once spun up, takes weapon damage on three cEmHit boxes and breaks (R1_Break).
 class cObjGatling : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ15
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ15
 
     virtual void move();
     virtual ~cObjGatling() {}

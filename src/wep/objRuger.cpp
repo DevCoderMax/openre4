@@ -16,6 +16,7 @@
 #include "snd.h"
 #include "pad.h"
 #include "rnd.h"
+#include <cstdio>
 
 // shotFrame[0..2] of the object (an extern-linkage const: emitted here, before init's string)
 extern const u8 ruger_tbl[3];
@@ -25,6 +26,8 @@ const u8 ruger_tbl[3] = { 0x10, 0xE, 0xC };
 #ifndef OBJRUGER_NO_INIT   // pl0d (Wesker) carries this object without the entry point (src/pl0d/objRuger.cpp)
 void ObjRuger_init(cObj* obj)
 {
+    printf("[ObjRuger_init] obj=%p, sizeof(cObjRuger)=%zu, sizeof(cObjWep)=%zu\n", obj, sizeof(cObjRuger), sizeof(cObjWep));
+    fflush(stdout);
     new (obj) cObjRuger();
 }
 #endif

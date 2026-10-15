@@ -22,12 +22,22 @@ CameraMotion::CameraMotion(void* data, int hokan, int flags, f32 frame)
     int i;
 
     memclr_asm(w, sizeof(MOTION_INFO));
+#if defined(OPENRE4_NATIVE)
+    if (data != NULL) {
+        UnpackMotionNative(data);
+    }
+#endif
     w->pMot = (MotionData*) data;
     w->Mot_frame_max = (f32) (((MotionData*) data)->maxFrame & 0x3FFF);
     w->Mot_frame_max += 1.0f;
     w->Joint_num = w->pMot->nParts;
     w->pJoint_kind = (u16*) ((u8*) w->pMot + 3);
     w->pJoint_no = (u8*) w->pMot + (w->Joint_num * 2 + 3);
+#if defined(OPENRE4_NATIVE)
+    tbl = (u32*) (((uintptr_t) w->pJoint_no + w->Joint_num + 3) & ~3);
+    tbl++;
+    w->pHermite_data = tbl;
+#else
     tbl = (u32*) ((u32) w->pJoint_no + w->Joint_num);
     tbl = (u32*) (((u32) tbl + 3) & ~3);
     tbl++;
@@ -37,6 +47,7 @@ CameraMotion::CameraMotion(void* data, int hokan, int flags, f32 frame)
         }
     }
     w->pHermite_data = tbl;
+#endif
     for (i = 0; i < w->Joint_num; i++) {
         CAM_HIST(w, i)[0] = CAM_HIST(w, i)[1] = CAM_HIST(w, i)[2] = 0;
     }
@@ -73,7 +84,7 @@ void CameraMotion::move()
     pp->Attr = 2;
     for (i = 0; i < w->Joint_num; i++) {
         pp->Data_fmt = w->pJoint_kind[i] >> 12;
-        pp->pData = (u8*) w->pHermite_data[i];
+        pp->pData = GET_HERMITE_DATA(w, i);
         switch (w->pJoint_no[i]) {
         case 0:
             HermiteInterpolation(pp, &pos, CAM_HIST(w, i));

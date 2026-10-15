@@ -1585,4 +1585,6 @@ void Esp1b_SpTrans(cEsp* esp)
 }
 
 // The split object's .sdata is padded to 8 bytes.
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

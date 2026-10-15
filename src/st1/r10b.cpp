@@ -82,7 +82,7 @@ static inline void r10b_waitEvt()
 // The rooms call Event::FlgOnStatus out of line (event.h has it in-class).
 void EvtFlgOnStatus(Event* e, u32 no) asm("FlgOnStatus__5EventUl");
 
-int readEvent(int no, int wait, void** out);
+static int readEvent(int no, int wait, void** out);
 void freeEvent(int no);
 static void R10b_chkEmDie();
 static void R10b_chkWater();
@@ -205,7 +205,7 @@ static char* r10b_evtName[6] = {
 
 // Loads event `no` (r10b_evtName) through a data unit; with `wait` the data is swapped into the
 // boss module's block and `out` receives its address.
-int readEvent(int no, int wait, void** out)
+static int readEvent(int no, int wait, void** out)
 {
     if (out != 0) {
         *out = 0;
@@ -906,4 +906,6 @@ static void r10b_setEm()
 }
 
 // the split object's .data is 8-aligned
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

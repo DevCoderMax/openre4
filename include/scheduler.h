@@ -38,7 +38,11 @@ public:
     OSThread Thread;          // 0x18
     OSThreadQueue Queue;      // 0x330
     void* (*hook)(void*);     // 0x338
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    void (*pFunc)(void*);
+#else
     void (*pFunc)(int);        // 0x33C
+#endif
     void* pModel;              // 0x340
     u8 pad_344[4];
 
@@ -73,7 +77,19 @@ void TaskSleep(int ctr);
 void TaskExit();
 void TaskSuspend(int level);
 void TaskSignal(int level);
+#if defined(__cplusplus)
+struct TaskFunc {
+    void* ptr;
+    TaskFunc(void* p = nullptr) : ptr(p) {}
+    template<typename F>
+    TaskFunc(F* f) : ptr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(f))) {}
+    operator void*() const { return ptr; }
+    template<typename F>
+    operator F*() const { return reinterpret_cast<F*>(ptr); }
+};
+#else
 typedef void* TaskFunc;
+#endif
 void TaskSchedulerInit();
 void TaskAllClear();
 u32 GetStackSize(int level);

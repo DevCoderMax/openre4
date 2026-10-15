@@ -81,6 +81,7 @@ void systemResetCommon();
 void systemHardReset();
 void systemSoftReset();
 void setLanguage();
+void bio4_frame();
 extern int vsync_cnt;
 extern char* pUser_name;
 extern void* roomInfoAddr;

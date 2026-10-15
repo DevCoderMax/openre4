@@ -53,7 +53,9 @@ typedef struct _SHELF_SMD {
 static R113Work* r113_work;
 
 // The original's .data is 8-aligned (r105 has the same).
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif
 static DATA_WORK r113_cesspit = {0x52, 0x53, 0x81, 0x9F, 6, 5, 7};
 static SHELF_SMD r113_shelf0 = {{0x57, 0x58}};
 static SHELF_SMD r113_shelf1 = {{0x59, 0x5A}};
@@ -147,7 +149,9 @@ static void r113_execHide(int mode)
         SndCall(6, 0x14, &pSUB->pos, 0, 0, 0);
         for (;;) {
             door->pList->ang.z += spd;
+#if defined(__powerpc__) || defined(__ppc__)
             asm("" : "+f"(spd)); // COMPILER-DIFF: candidate #9
+#endif
             spd += add;
             if (door->pList->ang.z > lim) {
                 break;

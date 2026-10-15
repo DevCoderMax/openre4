@@ -1799,7 +1799,7 @@ static void printEditTable()
     // and the hard register carries the base through the tail without a REG_EQUIV (see the tail).
     // `obj->be_flag` is re-read at every use (the target's `mr r11,r0` is gcse's PRE copy of the isAlive
     // load, not a `flag` local).
-    register int x2 asm("r27");
+    register int x2;
     char name[8];
 
     {

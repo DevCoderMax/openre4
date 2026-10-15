@@ -161,7 +161,9 @@ void cEmShield::beginEvent(u32 flag)
 // Damage: every few hits a plank breaks off, and the fourth plank, an explosion or a heavy weapon
 // destroys the shield. Byte-identical only with the default-labelled case members, the separate
 // `parts0` / `parts` / `parts2` pointers and the do-while(0) void SndCallV alias below.
-void SndCallV(u16, u16, Vec*, int, int, cUnit*) asm("SndCall__FUsUsP3VeciiP5cUnit");
+inline void SndCallV(u16 blk, u16 no, Vec* pos, int id, int vol, cUnit* obj) {
+    SndCall(blk, no, pos, id, vol, obj);
+}
 // Weapon hit reaction (see the note above). Hits count towards knocking off the hit plank, and the
 // fourth plank or a heavy / explosive weapon breaks the whole shield. Shotguns decide by hit distance.
 void emShieldDmCk(cEmShield* pEm)

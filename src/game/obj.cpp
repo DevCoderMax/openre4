@@ -55,6 +55,8 @@ cObjMgr::cObjMgr() : cManager<cObj>(OBJ_WORK_SIZE, 2)
 {
     setName("cObjMgr");
     Guid = 0;
+    printf("[SIZEOF CHECK] sizeof(cObj)=%zu, OBJ_WORK_SIZE=0x%x (%d)\n", sizeof(cObj), OBJ_WORK_SIZE, OBJ_WORK_SIZE);
+    fflush(stdout);
 }
 
 // Manager warnings to the log.

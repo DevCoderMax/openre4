@@ -99,6 +99,14 @@ void Esp08_TransShimmer(cEsp08* esp, int type);
 // The `=m` keep-alive after the mask quad keeps y and st1 live through it (global-alloc order
 // y after the double loop's 0x4330 magic, st1 after y1: f24/f21 as the original) without
 // touching ss1/x. See "DOL esp08/esp18 final closer" in docs/research/.
+#if defined(__powerpc__) || defined(__ppc__)
+#define ESP08_ASM_F(v) asm("" : "+f"(v))
+#define ESP08_ASM_M(m, a, b) asm("" : "=m"(m) : "f"(a), "f"(b))
+#else
+#define ESP08_ASM_F(v)
+#define ESP08_ASM_M(m, a, b)
+#endif
+
 #define ESP08_TILES()                                                                             \
     ds = s1 - s0;                                                                                 \
     dt = t1 - t0;                                                                                 \
@@ -118,14 +126,14 @@ void Esp08_TransShimmer(cEsp08* esp, int type);
     tileW = sx / w->Div_x;                                                                        \
     if (w->Scr_x != 0.0f) {                                                                        \
         if (w->Scr_y != 0.0f) {                                                                    \
-            x = x0; asm("" : "+f"(x)); /* COMPILER-DIFF: candidate (first-tile copy canon) */  \
-            y = y0; asm("" : "+f"(y));                                                            \
+            x = x0; ESP08_ASM_F(x); /* COMPILER-DIFF: candidate (first-tile copy canon) */       \
+            y = y0; ESP08_ASM_F(y);                                                                \
             y1 = y + tileH * w->Scr_y;                                                             \
             x1 = x + tileW * w->Scr_x;                                                             \
             st0 = t0 + dt * (1.0f - w->Scr_y);                                                     \
             ss0 = s0 + ds * (1.0f - w->Scr_x);                                                     \
-            st1 = t1; asm("" : "+f"(st1));                                                        \
-            ss1 = s1; asm("" : "+f"(ss1));                                                        \
+            st1 = t1; ESP08_ASM_F(st1);                                                            \
+            ss1 = s1; ESP08_ASM_F(ss1);                                                            \
             if (!ind) {                                                                           \
                 ESP08_QUAD(x, y, x1, y1, ss0, st0, ss1, st1)                                      \
             } else {                                                                              \
@@ -136,7 +144,7 @@ void Esp08_TransShimmer(cEsp08* esp, int type);
                     dv = w->Scr_y / w->Div_y; /* the divides are scheduled as in another block  */ \
                 } while (0);                                                                      \
                 ESP08_QUAD2(x0, y0, x1, y1, ss0, st0, s1, t1, cu, cv, cu + du, cv + dv)           \
-                asm("" : "=m"(inv[0][0]) : "f"(y), "f"(st1)); /* COMPILER-DIFF: candidate (keep-alive, global-alloc order) */ \
+                ESP08_ASM_M(inv[0][0], y, st1); /* COMPILER-DIFF: candidate (keep-alive, global-alloc order) */ \
             }                                                                                     \
         }                                                                                         \
         y = y0 + tileH * w->Scr_y;                                                                 \
@@ -797,4 +805,6 @@ int cEsp08::SetFreeWork(cEspSeqTbl* pSeq, u32* pRand_seed)
 }
 
 // The split object's .sdata is 8-aligned and 0x10 bytes (prm1..prm3 + 4 pad).
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

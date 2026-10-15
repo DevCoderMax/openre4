@@ -58,12 +58,12 @@ void Snd_str_aram_dma_sub(SND_STR* str)
     src += str->dvd_end_idx * str->buff_one;
     ofs = str->dma_req_idx * str->buff_size;
     if (str->shd_flag & 0x1) {
-        ARQPostRequest(&str->arq_req_l, 0, ARQ_TYPE_MRAM_TO_ARAM, ARQ_PRIORITY_HIGH, (u32) src, str->ar_buff_adrs_l + ofs,
+        ARQPostRequest(&str->arq_req_l, 0, ARQ_TYPE_MRAM_TO_ARAM, ARQ_PRIORITY_HIGH, (uintptr_t) src, str->ar_buff_adrs_l + ofs,
                        str->buff_size, NULL);
-        ARQPostRequest(&str->arq_req_r, 0, ARQ_TYPE_MRAM_TO_ARAM, ARQ_PRIORITY_HIGH, (u32) (src + 0x4000),
+        ARQPostRequest(&str->arq_req_r, 0, ARQ_TYPE_MRAM_TO_ARAM, ARQ_PRIORITY_HIGH, (uintptr_t) (src + 0x4000),
                        str->ar_buff_adrs_r + ofs, str->buff_size, cb_aram_dma_end);
     } else {
-        ARQPostRequest(&str->arq_req_l, 0, ARQ_TYPE_MRAM_TO_ARAM, ARQ_PRIORITY_HIGH, (u32) src, str->ar_buff_adrs_l + ofs,
+        ARQPostRequest(&str->arq_req_l, 0, ARQ_TYPE_MRAM_TO_ARAM, ARQ_PRIORITY_HIGH, (uintptr_t) src, str->ar_buff_adrs_l + ofs,
                        str->buff_size, cb_aram_dma_end);
     }
     str->dma_busy = 1;
@@ -108,7 +108,11 @@ void cb_dvd_read_end(s32 result, DVDFileInfo* info)
 
 // ARQ callback: advances the ARAM ring slot; while buffering (before ready) the last slot filled
 // marks the stream ready (status 2), else another read is requested.
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+void cb_aram_dma_end(uintptr_t task)
+#else
 void cb_aram_dma_end(u32 task)
+#endif
 {
     ARQRequest* req;
     SND_STR* str;

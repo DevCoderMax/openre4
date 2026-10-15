@@ -767,7 +767,9 @@ BOOL ObaLineHitChk(cModel* m, cAtariInfo* info, const Vec& a, const Vec& b, Vec&
     // gates it), so the `mr r3,r27` hoisted argument takes the slot the codeless anchor used to
     // occupy; the extra `"f"(den)` reference keeps den's local-alloc priority above the product's
     // (which gained a third reference) so den stays in f0 and the product in f13.
+#if defined(__powerpc__) || defined(__ppc__)
     asm("" : "+f"(den) : "f"(den), "f"(de * ef));
+#endif
     t = (ee * df - de * ef) / den;
     s = (de * df - dd * ef) / den;
     tc = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);

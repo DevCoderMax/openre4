@@ -239,4 +239,6 @@ static void r211_ShelfOpened(int no)
 }
 
 // The next unit's .data starts 8-aligned.
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

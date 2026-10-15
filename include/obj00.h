@@ -35,7 +35,7 @@ struct FREE_OBJ00 {
 // three-point rope when cut, fades out when flagged.
 class cObj00 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ00
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ00
 
     virtual void move();
     virtual ~cObj00() {}

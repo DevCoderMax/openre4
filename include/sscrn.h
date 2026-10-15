@@ -15,8 +15,11 @@ struct SUB_SCREEN;
 struct SsFileWork;
 struct ItemScreenWork;
 
-// Sub screen data archive (ss_cmmn.dat / ss_pzzl.dat): a u32* to a table of byte offsets to its sub-files.
+#if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
+#define SS_ARC_PTR(arc, no) ((void*) ((u8*)(arc) + __builtin_bswap32(((u32*) (arc))[(no)])))
+#else
 #define SS_ARC_PTR(arc, no) ((void*) ((arc)[no] + (u32) (arc)))
+#endif
 
 // The sub screen's record in the save image (PS2 SSCRN_SAVE_DATA, 4 bytes). GC saves the whole word
 // at SUB_SCREEN::save (map_mode, map_mark, ...); PS2 keeps only map_mark here.

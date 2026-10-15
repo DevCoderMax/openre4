@@ -14,6 +14,7 @@ void Em12Init(cEm* em);
 void Em12Set(cEm10* em);
 void Em12WeaponSet(cEm10* em);
 
+#if !defined(OPENRE4_NATIVE)
 // Module entry (SN loader): registers Em12Init as the DOL's enemy constructor (EmInitFunc) and Em12Set as
 // em10.cpp's per-enemy set function (Em10SetFunc).
 extern "C" void _prolog()
@@ -32,12 +33,16 @@ extern "C" void _epilog()
 extern "C" void _unresolved()
 {
 }
+#endif
 
 // EmInitFunc of the module: constructs the shared cEm10 class in the manager's work (em10_R0_Init then
 // builds the enemy through Em10SetFunc).
 void Em12Init(cEm* em)
 {
-    new (em) cEm10();
+    PlArc* arc = em->subArc;
+    new (em) cEm10;
+    em->subArc = arc;
+    em->subArc2 = arc;
 }
 
 // Em10SetFunc of this module: the village Ganados (class 0): model types 0 (default), 1, 3 and 4 (chainsaw), voice sets 0..3 like em10. Fills the work's motion table mot[0..40] (body / head / hand

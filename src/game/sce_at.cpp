@@ -117,6 +117,15 @@ static inline u32* itemFindFlags()
 // Halfword fields of the save items: the original forms the address as integer arithmetic with the index
 // first (`idx*16 + ((u32)pG + ofs)`): non-struct MEM with an unflagged base, so pG is reloaded after
 // every store and the field offset is added to pG before the index (sthx base, idx).
+#if defined(OPENRE4_NATIVE)
+static inline uintptr_t saveItemBase(uintptr_t ofs)
+{
+    return (uintptr_t) pG + ofs;
+}
+#define RAW_F32(p, ofs) (*(f32*) ((uintptr_t) (p) + (uintptr_t) (ofs)))
+#define RAW_U32(p, ofs) (*(u32*) ((uintptr_t) (p) + (uintptr_t) (ofs)))
+#define EM_DEAD_BIT(n, i) (*(u32*) (((uintptr_t) (i) << 2) + emDeadRow(n)))
+#else
 static inline u32 saveItemBase(int ofs)
 {
     return (u32) pG + ofs;
@@ -127,6 +136,7 @@ static inline u32 saveItemBase(int ofs)
 #define RAW_U32(p, ofs) (*(u32*) ((u32) (p) + (ofs)))
 
 #define EM_DEAD_BIT(n, i) (*(u32*) (((i) << 2) + emDeadRow(n)))
+#endif
 #define SAVE_ITEM_HALF(i, f) (*(u16*) (saveItemBase(PG_OFS(item_save[0].f)) + ((i) << 4)))
 #define SAVE_ITEM_ROOM(i) SAVE_ITEM_HALF(i, room_no)
 #define SAVE_ITEM_ID(i) SAVE_ITEM_HALF(i, item_id)
@@ -169,8 +179,11 @@ struct SceAtSysWork {
     SceAtReserve reserve[16];  // 0x9C
     u8 m_use_tool_data;        // 0x11C  pAtData was allocated by the tool (t_sce_at) (PS2 m_use_tool_data)
     u8 m_use_tool_data_i;      // 0x11D  (PS2 m_use_tool_data_i)
-    u8 pad_11E[2];
     SCE_AT_DATA_CAM_CTRL* pCamAt;      // 0x120  camera control area in effect
+#if defined(OPENRE4_NATIVE)
+    SCE_AT_DATA* pAtWorkNative;
+    SCE_AT_DATA* pItemWorkNative;
+#endif
 };
 
 struct SceAtReleaseModel {
@@ -260,6 +273,149 @@ static SceAtFuncTbl sceAtFunc_tbl[21] = {
     {sceAtFunc_normal, 0},      // 0x14  item parent
 };
 
+#if defined(OPENRE4_NATIVE)
+static void UnpackGcSceAtData(SCE_AT_DATA* dst, const u8* src, bool isItem) {
+    memset(dst, 0, sizeof(SCE_AT_DATA));
+
+    // area at 0x04
+    dst->area.be_flag = src[0x04];
+    dst->area.type = src[0x05];
+    dst->area.pad = __builtin_bswap16(*(const u16*)(src + 0x06));
+    const u32* srcFlts = (const u32*)(src + 0x08);
+    u32* dstFlts = (u32*)&dst->area.xz4;
+    for (int k = 0; k < 11; k++) {
+        dstFlts[k] = __builtin_bswap32(srcFlts[k]);
+    }
+
+    dst->be_flg = src[0x34];
+    dst->id = src[0x35];
+    dst->no = src[0x36];
+    dst->hit_type = src[0x37];
+    dst->trg_type = src[0x38];
+    dst->target_type = src[0x39];
+    dst->task_level = src[0x3A];
+    dst->trg_type_bak = src[0x3B];
+    dst->pParam = nullptr;
+    dst->pFunc = nullptr;
+    dst->priority = src[0x44];
+    dst->kind = src[0x45];
+    dst->waiting_type = src[0x46];
+    dst->waiting_no = src[0x47];
+    dst->hit_dir_ang = (s8)src[0x48];
+    dst->hit_open_ang = (s8)src[0x49];
+    dst->act_type = src[0x4A];
+    dst->waiting_etc_id = src[0x4B];
+    dst->pParent = nullptr;
+    dst->parts_no = (s16)__builtin_bswap16(*(const u16*)(src + 0x50));
+    dst->country = *(const cFlag<u8, SCEAT_COUNTRY>*)(src + 0x52);
+    dst->act_color = src[0x53];
+    memcpy(dst->pad2, src + 0x54, 8);
+
+    const u8* pl = src + 0x5C;
+    memcpy(dst->data, pl, 0x40);
+
+    u8 id = dst->id;
+    if (isItem || id == SCEAT_ID_ITEM) {
+        SCE_AT_DATA_ITEM* it = &((SCE_AT_ITEM*)dst)->item;
+        u32* px = (u32*)&it->item_pos.x; *px = __builtin_bswap32(*(const u32*)(pl + 0x00));
+        u32* py = (u32*)&it->item_pos.y; *py = __builtin_bswap32(*(const u32*)(pl + 0x04));
+        u32* pz = (u32*)&it->item_pos.z; *pz = __builtin_bswap32(*(const u32*)(pl + 0x08));
+        it->pModel = nullptr;
+        u32* ex = (u32*)&it->eff_offset.x; *ex = __builtin_bswap32(*(const u32*)(pl + 0x10));
+        u32* ey = (u32*)&it->eff_offset.y; *ey = __builtin_bswap32(*(const u32*)(pl + 0x14));
+        u32* ez = (u32*)&it->eff_offset.z; *ez = __builtin_bswap32(*(const u32*)(pl + 0x18));
+        it->item_id = __builtin_bswap16(*(const u16*)(pl + 0x1C));
+        it->item_flg = __builtin_bswap16(*(const u16*)(pl + 0x1E));
+        it->item_num = __builtin_bswap16(*(const u16*)(pl + 0x20));
+        it->auto_item_flg = __builtin_bswap16(*(const u16*)(pl + 0x22));
+        it->eff_type = pl[0x24];
+        it->eff_setno = pl[0x25];
+        it->player_type = pl[0x26];
+        it->pos_set = pl[0x27];
+        it->ctrl_flag = pl[0x28];
+        it->disappear_timer = pl[0x29];
+        it->save_no = (s16)__builtin_bswap16(*(const u16*)(pl + 0x2A));
+        u32* rad = (u32*)&it->radius; *rad = __builtin_bswap32(*(const u32*)(pl + 0x2C));
+        u32* ax = (u32*)&it->ang_x; *ax = __builtin_bswap32(*(const u32*)(pl + 0x30));
+        u32* ay = (u32*)&it->ang_y; *ay = __builtin_bswap32(*(const u32*)(pl + 0x34));
+        u32* oa = (u32*)&it->open_ang; *oa = __builtin_bswap32(*(const u32*)(pl + 0x38));
+        it->se_no = pl[0x3C];
+        it->se_no2 = pl[0x3D];
+    } else if (id == SCEAT_ID_DOOR) {
+        SCE_AT_DATA_DOOR* dr = &dst->door;
+        u32* px = (u32*)&dr->next_pos.x; *px = __builtin_bswap32(*(const u32*)(pl + 0x00));
+        u32* py = (u32*)&dr->next_pos.y; *py = __builtin_bswap32(*(const u32*)(pl + 0x04));
+        u32* pz = (u32*)&dr->next_pos.z; *pz = __builtin_bswap32(*(const u32*)(pl + 0x08));
+        u32* ang = (u32*)&dr->next_ang_y; *ang = __builtin_bswap32(*(const u32*)(pl + 0x0C));
+        dr->next_stage_no = pl[0x10];
+        dr->next_room_no = pl[0x11];
+        dr->key_id = pl[0x12];
+        dr->key_flg = pl[0x13];
+        dr->pExitFunc = nullptr;
+        dr->next_part_no = pl[0x18];
+        dr->key_se = (s8)pl[0x19];
+        dr->open_se = pl[0x1A];
+        dr->fade_eff = pl[0x1B];
+        dr->pExitParam = nullptr;
+    } else if (id == SCEAT_ID_CAM_CTRL) {
+        SCE_AT_DATA_CAM_CTRL* cam = &dst->cam_ctrl;
+        u32* px = (u32*)&cam->pos.x; *px = __builtin_bswap32(*(const u32*)(pl + 0x00));
+        u32* py = (u32*)&cam->pos.y; *py = __builtin_bswap32(*(const u32*)(pl + 0x04));
+        u32* pz = (u32*)&cam->pos.z; *pz = __builtin_bswap32(*(const u32*)(pl + 0x08));
+        u32* ang = (u32*)&cam->ang_y; *ang = __builtin_bswap32(*(const u32*)(pl + 0x0C));
+        cam->pos_set = pl[0x10];
+        cam->type = pl[0x11];
+        u32* rad = (u32*)&cam->radius; *rad = __builtin_bswap32(*(const u32*)(pl + 0x14));
+        u32* out = (u32*)&cam->out_range; *out = __builtin_bswap32(*(const u32*)(pl + 0x18));
+    } else if (id == SCEAT_ID_LADDER) {
+        SCE_AT_DATA_LADDER* lad = &dst->ladder;
+        u32* px = (u32*)&lad->pos.x; *px = __builtin_bswap32(*(const u32*)(pl + 0x00));
+        u32* py = (u32*)&lad->pos.y; *py = __builtin_bswap32(*(const u32*)(pl + 0x04));
+        u32* pz = (u32*)&lad->pos.z; *pz = __builtin_bswap32(*(const u32*)(pl + 0x08));
+        u32* ang = (u32*)&lad->ang_y; *ang = __builtin_bswap32(*(const u32*)(pl + 0x0C));
+        lad->height = (s8)pl[0x10];
+        lad->type = pl[0x11];
+        lad->pos_set = pl[0x12];
+        lad->cam_no = pl[0x13];
+        lad->cam_no2 = pl[0x14];
+        lad->cam_no3 = pl[0x15];
+    } else if (id == SCEAT_ID_SCR_AT) {
+        SCE_AT_DATA_SCR_AT* sat = &dst->scr_at;
+        sat->pSat = nullptr;
+        sat->pEat = nullptr;
+        sat->set_flg = pl[0x08];
+        sat->sat_attr = (int)__builtin_bswap32(*(const u32*)(pl + 0x0C));
+        sat->eat_attr = (int)__builtin_bswap32(*(const u32*)(pl + 0x10));
+        sat->ctrl_flag = __builtin_bswap32(*(const u32*)(pl + 0x14));
+    } else if (id == SCEAT_ID_DAMAGE) {
+        dst->damage.dmg_timer = (int)__builtin_bswap32(*(const u32*)(pl + 0x00));
+        dst->damage.dmg_type = pl[0x04];
+        dst->damage.dmg_ctrl = pl[0x05];
+        dst->damage.dmg_vol = (int)__builtin_bswap32(*(const u32*)(pl + 0x08));
+        u32* da = (u32*)&dst->damage.dmg_ang; *da = __builtin_bswap32(*(const u32*)(pl + 0x0C));
+    } else if (id == SCEAT_ID_SHD_DISP) {
+        dst->shd_disp.shd_no = __builtin_bswap16(*(const u16*)(pl + 0x00));
+        dst->shd_disp.disp_flg = pl[0x02];
+        dst->shd_disp.set_flg = pl[0x03];
+    } else if (id == SCEAT_ID_USE) {
+        dst->use.use_id = __builtin_bswap16(*(const u16*)(pl + 0x02));
+    } else if (id == SCEAT_ID_SAVE) {
+        dst->save.term_no = __builtin_bswap32(*(const u32*)(pl + 0x00));
+    } else if (id == SCEAT_ID_MES) {
+        dst->mes.mes_type = (s16)__builtin_bswap16(*(const u16*)(pl + 0x00));
+        dst->mes.mes_no = (s16)__builtin_bswap16(*(const u16*)(pl + 0x02));
+        dst->mes.cam_no = pl[0x04];
+        dst->mes.se_type = pl[0x05];
+        dst->mes.se_no = __builtin_bswap16(*(const u16*)(pl + 0x06));
+        dst->mes.attr = pl[0x08];
+    } else if (id == SCEAT_ID_FLG) {
+        dst->flg.flg_id = pl[0x00];
+        dst->flg.flg_act = pl[0x01];
+        dst->flg.flg_no = __builtin_bswap16(*(const u16*)(pl + 0x02));
+    }
+}
+#endif
+
 // Room start: resets the area system (ordering table, hit / exec flags, reservations) and links the
 // room's AEV records (version 0x104) and ITA item records (version 0x105, numbered +0x80) into the
 // ordering table by their otNo.
@@ -272,6 +428,16 @@ void SceAtInit(void* pHeader, void* pHeader_i)
     pS->pAtWork = 0;
     pS->pCamAt = 0;
     pS->hideActive = 0;
+#if defined(OPENRE4_NATIVE)
+    if (pS->pAtWorkNative) {
+        delete[] pS->pAtWorkNative;
+        pS->pAtWorkNative = nullptr;
+    }
+    if (pS->pItemWorkNative) {
+        delete[] pS->pItemWorkNative;
+        pS->pItemWorkNative = nullptr;
+    }
+#endif
     ClearOTagR(pS->ot, 16);
     initReleaseModelTbl();
     for (i = 0; i < 16; i++) {
@@ -282,27 +448,63 @@ void SceAtInit(void* pHeader, void* pHeader_i)
     pS->m_use_tool_data = 0;
     pS->m_use_tool_data_i = 0;
     if (pHeader != 0) {
+        u16 ver = ((SceAtFileHead*) pHeader)->version;
+#if defined(OPENRE4_NATIVE)
+        if (ver == 0x0401) ver = 0x0104;
+#endif
         if (strcmp((char*) pHeader, "AEV") != 0) {
             pLog->err(0, 0, "THIS DATA IS NOT SCENARIO ATARI DATA");
-        } else if (((SceAtFileHead*) pHeader)->version != 0x104) {
+        } else if (ver != 0x104) {
             pLog->err(0, 0, "SceAt DATA IS OLD VERSION");
         } else {
             pS->pAtData = pHeader;
+#if defined(OPENRE4_NATIVE)
+            u16 num = ((SceAtFileHead*) pHeader)->num;
+            if (num > 0x1000) num = __builtin_bswap16(num);
+            pS->pAtWorkNative = new SCE_AT_DATA[num]();
+            const u8* raw = (const u8*) pHeader + 0x10;
+            for (i = 0; i < num; i++) {
+                UnpackGcSceAtData(&pS->pAtWorkNative[i], raw + i * 0x9C, false);
+            }
+            for (i = num - 1; i >= 0; i--) {
+                SCE_AT_DATA* w = &pS->pAtWorkNative[i];
+                AddPrim(&pS->ot[w->priority], (u32*) w);
+            }
+#else
             pS->pAtWork = (u32) ((u8*) pHeader + 0x10);
             for (i = ((SceAtFileHead*) pS->pAtData)->num - 1; i >= 0; i--) {
                 SCE_AT_DATA* w = (SCE_AT_DATA*) (i * sizeof(SCE_AT_DATA) + pS->pAtWork);
 
                 AddPrim(&pS->ot[w->priority], (u32*) w);
             }
+#endif
         }
     }
     if (pHeader_i != 0) {
+        u16 ver_i = ((SceAtFileHead*) pHeader_i)->version;
+#if defined(OPENRE4_NATIVE)
+        if (ver_i == 0x0501) ver_i = 0x0105;
+#endif
         if (strcmp((char*) pHeader_i, "ITA") != 0) {
             pLog->err(0, 0, "THIS DATA IS NOT ITEM SET DATA");
-        } else if (((SceAtFileHead*) pHeader_i)->version != 0x105) {
+        } else if (ver_i != 0x105) {
             pLog->err(0, 0, "SceItem DATA IS OLD VERSION");
         } else {
             pS->pItemData = pHeader_i;
+#if defined(OPENRE4_NATIVE)
+            u16 num_i = ((SceAtFileHead*) pHeader_i)->num;
+            if (num_i > 0x1000) num_i = __builtin_bswap16(num_i);
+            pS->pItemWorkNative = new SCE_AT_DATA[num_i]();
+            const u8* raw_i = (const u8*) pHeader_i + 0x10;
+            for (i = 0; i < num_i; i++) {
+                UnpackGcSceAtData(&pS->pItemWorkNative[i], raw_i + i * 0x9C, true);
+                pS->pItemWorkNative[i].no += 0x80;
+            }
+            for (i = num_i - 1; i >= 0; i--) {
+                SCE_AT_DATA* w = &pS->pItemWorkNative[i];
+                AddPrim(&pS->ot[w->priority], (u32*) w);
+            }
+#else
             pS->pItemWork = (u32) ((u8*) pHeader_i + 0x10);
             for (i = ((SceAtFileHead*) pS->pItemData)->num - 1; i >= 0; i--) {
                 SCE_AT_DATA* w;
@@ -311,6 +513,7 @@ void SceAtInit(void* pHeader, void* pHeader_i)
                 w = (SCE_AT_DATA*) (i * sizeof(SCE_AT_DATA) + pS->pItemWork);
                 AddPrim(&pS->ot[w->priority], (u32*) w);
             }
+#endif
         }
     }
 }
@@ -326,12 +529,24 @@ SCE_AT_DATA* sceAtGetOtAddr(SCE_AT_DATA* p)
 {
     u32 v;
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    while (p && (v = p->tag) != 0xFFFFFFFF) {
+        p = (SCE_AT_DATA*) OtLookup(v);
+        if (!p) {
+            break;
+        }
+        if ((s32) v < 0) {
+            return p;
+        }
+    }
+#else
     while ((v = p->tag) != 0xFFFFFFFF) {
         p = (SCE_AT_DATA*) (v | 0x80000000);
         if ((s32) v < 0) {
             return p;
         }
     }
+#endif
     return 0;
 }
 
@@ -1064,7 +1279,7 @@ void sceAtGetItem(SCE_AT_ITEM* w)
     case 8: {
         // COMPILER-DIFF: 13 (global-alloc rotation it/ItemMgr/money): money pinned to the
         // original's r29 settles the other two (it r31, the ItemMgr high r30).
-        register u32 money asm("r29") = pG->peseta;
+        register u32 money = pG->peseta;
 
         put = ItemMgr.get(it->item_id, it->item_num);
         if (it->item_id == 0x73) {
@@ -1179,7 +1394,7 @@ void sceAtGetItem(SCE_AT_ITEM* w)
             // COMPILER-DIFF: candidate #12 (r0 pin): cse1 follows the `bne` into the else arm and would
             // canonicalise `res == 2` to sel; canon_reg never replaces a hard register, so the pinned res
             // keeps `cmpwi r0,2` and sel (a pseudo: preferred as class head) keeps `mr; cmpwi sel,1`.
-            register int res asm("r0") = cMes.GetSelectMessage(0);
+            register int res = cMes.GetSelectMessage(0);
 
             sel = res;
             if (sel == 1) {
@@ -1415,7 +1630,7 @@ void sceAtGetItem_NoModel(SCE_AT_ITEM* w)
             // COMPILER-DIFF: candidate #12 (r0 pin): cse1 follows the `bne` into the else arm and would
             // canonicalise `res == 2` to sel; canon_reg never replaces a hard register, so the pinned res
             // keeps `cmpwi r0,2` and sel (a pseudo: preferred as class head) keeps `mr; cmpwi sel,1`.
-            register int res asm("r0") = cMes.GetSelectMessage(0);
+            register int res = cMes.GetSelectMessage(0);
 
             sel = res;
             if (sel == 1) {
@@ -2025,7 +2240,7 @@ int sceAtFunc_pos_jump(SCE_AT_DATA* w, cModel* pModel)
     // the local-alloc'd dstAngle load in f0); ours allocates the 3-ref 0.0 first (f0). Both values
     // pinned: the angle too, so the y store gets the same call anti-dependent as the z/x stores
     // and the three stores keep the source order.
-    register f32 a asm("fr0");
+    register f32 a;
     f32 z;
 
     pPL->setPos(&w->pos_jump.dest_pos);
@@ -2267,7 +2482,7 @@ int sceAtPullAtNo(u8* out)
         ((u32*) used)[w->no >> 5] |= 0x80000000 >> (w->no & 31);
     }
     for (i = 0; i < 256; i++) {
-        if (!FlagChkVar((u32) used, i)) {
+        if (!FlagBitChk(used, i)) {
             *out = i;
             return 1;
         }

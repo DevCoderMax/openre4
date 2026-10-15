@@ -44,6 +44,7 @@ public:
     void* getTplPtr(int id);
     void* getMotPtr(int id);
     int getWorkNum();
+    void convertEndian();
 };
 
 // Scroll extra data `SMX`: per-id object parameters.
@@ -73,6 +74,7 @@ public:
     u32 Dummy30;   // 0x0C
 
     cSmxWork* at(u32 i) { return (cSmxWork*) ((u8*) this + sizeof(*this) + sizeof(cSmxWork) * i); }
+    void convertEndian();
 };
 
 // Pointer wrapper (0x4 bytes) around a loaded SMX file's cSmxData; PS2 evidence only (its own

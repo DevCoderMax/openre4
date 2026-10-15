@@ -37,7 +37,7 @@ struct FREE_OBJ08 {
 // the scenario, the enemies and the player for hits.
 class cObj08 : public cObj {
 public:
-    u8 free[OBJ_WORK_SIZE - 0x328];   // 0x328  FREE_OBJ08
+    u8 free[OBJ_WORK_SIZE - OBJ_WORK_BASE];   // 0x328  FREE_OBJ08
 
     virtual void move();
 };

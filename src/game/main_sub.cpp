@@ -448,6 +448,28 @@ void Bg_brightness_set(f32 bright)
 // quad at (x, y) of w x h pixels.
 void DrawTpl(TEXPalette* tpl, int x, int y, int w, int h)
 {
+    if (tpl == NULL) {
+        return;
+    }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    UnpackTplNative(tpl);
+    TEXDescriptor* desc = TEXGet(tpl, 0);
+    if (!desc || !desc->textureHeader) {
+        return;
+    }
+    TEXHeader* hdr = desc->textureHeader;
+    GXTexObj texObj;
+    GXTlutObj tlutObj;
+    if (hdr->format - 8 <= 1 && desc->CLUTHeader != NULL) {
+        CLUTHeader* clut = desc->CLUTHeader;
+        GXInitTexObjCI(&texObj, hdr->data, hdr->width, hdr->height, hdr->format, 0, 0, 0, 0);
+        GXInitTlutObj(&tlutObj, clut->data, clut->format, clut->numEntries);
+        GXLoadTlut(&tlutObj, 0);
+    } else {
+        GXInitTexObj(&texObj, hdr->data, hdr->width, hdr->height, hdr->format, 0, 0, 0);
+    }
+    DrawTexture(&texObj, x, y, 1, w, h);
+#else
     GXTexObj texObj;
     GXTlutObj tlutObj;
     TEXDescriptor* desc;
@@ -490,6 +512,7 @@ void DrawTpl(TEXPalette* tpl, int x, int y, int w, int h)
         GXInitTexObj(&texObj, hdr->data, hdr->width, hdr->height, hdr->format, 0, 0, 0);
     }
     DrawTexture(&texObj, x, y, 1, w, h);
+#endif
 }
 
 // Draws a texture object as a white screen-space quad (ortho 448 x fbWidth).

@@ -255,7 +255,9 @@ void Espgen43_TransSub(cEspgen* pGen)
     GXSetCullMode(0);
     GXSetZMode(1, 3, 1);
     cModel model;
+#if defined(__powerpc__) && !defined(TARGET_PC)
     u8 modelPad[0x320 - sizeof(cModel)];
+#endif
     PSMTXIdentity(model.mat);
     {
         static const Vec p0 = {0.0f, 0.0f, 0.0f};
@@ -578,4 +580,6 @@ int Espgen43_SetFreeWork(cEspgen* pGen, cEspSeqTbl* pSeq, cEspSeqHead* pSeqHed, 
     return 1;
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

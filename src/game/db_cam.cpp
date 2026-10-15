@@ -1540,4 +1540,6 @@ int adjust_qFPS(JOY* pJoy, int x, int y, int flag, int* out)
     return ret;
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

@@ -49,7 +49,9 @@ struct R11eWork {
 static R11eWork* r11e_work;
 
 // The original's .data is 8-aligned (r105 has the same).
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif
 static Vec r11e_koyaAPos = {13389.0f, -56.0f, 38152.0f};
 static Vec r11e_koyaBPos = {20505.0f, -56.0f, 36293.0f};
 static Vec r11e_sakuAPos = {1579.0f, 0.0f, 35259.0f};
@@ -68,10 +70,10 @@ static Vec r11e_rockBRot = {0.0f, -1.5707964f, 0.0f};
 
 void funcAshley(cEm* m);
 static void koya_destroy_check();
-void koyaA_destroy();
-void koyaB_destroy();
-void koyaA_delete();
-void koyaB_delete();
+static void koyaA_destroy();
+static void koyaB_destroy();
+static void koyaA_delete();
+static void koyaB_delete();
 void sakuA_destroy();
 void sakuB_destroy();
 void sakuA_delete();
@@ -200,7 +202,7 @@ static void koya_destroy_check()
 }
 
 // Hut A is smashed by the giant: crash SE, debris effect, models and collision removed.
-void koyaA_destroy()
+static void koyaA_destroy()
 {
     Vec pos = {13370.0f, -70.0f, 38135.0f};
     Vec rot = {0.0f, 3.054326f, 0.0f};
@@ -211,7 +213,7 @@ void koyaA_destroy()
 }
 
 // Hut B is smashed by the giant (see koyaA_destroy).
-void koyaB_destroy()
+static void koyaB_destroy()
 {
     Vec pos = {20500.0f, -60.0f, 36273.0f};
     Vec rot = {0.0f, 3.3684855f, 0.0f};
@@ -222,7 +224,7 @@ void koyaB_destroy()
 }
 
 // Remove hut A: collision pieces, scroll objects 4/5, item areas 0x80..0x84 off.
-void koyaA_delete()
+static void koyaA_delete()
 {
     SatMgr.destroy(r11e_work->sat[0]);
     EatMgr.destroy(r11e_work->eat[0]);
@@ -236,7 +238,7 @@ void koyaA_delete()
 }
 
 // Remove hut B: collision pieces, scroll objects 6/7, item areas 0x85..0x8B off.
-void koyaB_delete()
+static void koyaB_delete()
 {
     SatMgr.destroy(r11e_work->sat[1]);
     EatMgr.destroy(r11e_work->eat[1]);

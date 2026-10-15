@@ -30,6 +30,7 @@
 #include "em_sub.h"
 #include "read.h"
 #include "shape.h"
+#include <stdio.h>
 
 
 // cManager<T>::arrayFree / arrayAlloc: definitions in cManager.h (game.cpp instantiates them too).
@@ -60,6 +61,9 @@ cEmMgr::cEmMgr() : cManager<cEm>(EM_WORK_SIZE, 2)
 {
     setName("cEmMgr");
     Guid = 0;
+    printf("[SIZEOF CHECK] sizeof(cEm)=%zu, sizeof(cPlayer)=%zu, EM_WORK_SIZE=0x%x (%d)\n",
+           sizeof(cEm), sizeof(cPlayer), EM_WORK_SIZE, EM_WORK_SIZE);
+    fflush(stdout);
 }
 
 // cManager log hook: routes the manager's messages to pLog as level-6 warnings.
@@ -75,11 +79,14 @@ void cEmMgr::log(const char* pStr, ...)
 // the loaded enemy module (0 when the module is not loaded), an object class, or a bare cEm.
 int cEmMgr::construct(cEm* pEm, u32 id)
 {
+    printf("[OpenRE4 Debug] cEmMgr::construct: id=%u, pl_type=%d\n", id, pG->pl_type); fflush(stdout);
     switch (id) {
     case 0:
         switch (pG->pl_type) {
         case 0:
+            printf("[OpenRE4 Debug] cEmMgr::construct: instantiating cPlLeon\n"); fflush(stdout);
             pEm = new (pEm) cPlLeon;
+            printf("[OpenRE4 Debug] cEmMgr::construct: cPlLeon instantiated successfully\n"); fflush(stdout);
             break;
         case 1:
             pEm = new (pEm) cPlAshley;
@@ -171,7 +178,12 @@ int cEmMgr::construct(cEm* pEm, u32 id)
         if (pEm->subArc == 0) {
             return 0;
         }
-        EmInitFunc(pEm);
+        {
+            PlArc* arc = pEm->subArc;
+            EmInitFunc(pEm);
+            pEm->subArc = arc;
+            pEm->subArc2 = arc;
+        }
         break;
     }
     switch (pEm->id) {

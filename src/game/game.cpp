@@ -225,6 +225,14 @@ void GameTask()
     pG->Rno2 = 0;
     pG->Rno3 = 0;
     for (;;) {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        static int last_rno0 = -1;
+        if (pG->Rno0 != last_rno0) {
+            printf("[OpenRE4 Core] GameTask state transition: Rno0 = %d\n", pG->Rno0);
+            fflush(stdout);
+            last_rno0 = pG->Rno0;
+        }
+#endif
         gameDebug();
         GetGameTime(&h, &m, &s);
         eprintf(20, 16, 7, 0, "%d:%02d:%02d %08X", h, m, s, Joy[0].on);
@@ -456,17 +464,29 @@ void gameRoomInit()
         EatMgr.registEffInfo(EAT_ET_ROOM2, (AtEffInfo*) &effInfoNormal);
         EatMgr.registEffInfo(EAT_ET_ROOM3, (AtEffInfo*) &effInfoNormal);
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[OpenRE4 Core] gameRoomInit: SAT and EAT collision initialized successfully!\n");
+    fflush(stdout);
+#endif
     SceAtInit(GetDataExt(pG->pRoom, "AEV", 0), GetDataExt(pG->pRoom, "ITA", 0));
+    printf("[OpenRE4 Core] gameRoomInit: SceAtInit completed\n"); fflush(stdout);
     EvtMgr.roomInit();
     EvtMgr.arrayAlloc(2);
     EvtMgr.myRoomInit();
     EvtDebug.myRoomInit();
+    printf("[OpenRE4 Core] gameRoomInit: EvtMgr completed\n"); fflush(stdout);
     if (!SysFlagChk(pG, SYS_DOORDEMO)) {
+        printf("[OpenRE4 Core] gameRoomInit: before EmMgr.create(0, 0)\n"); fflush(stdout);
         EmMgr.create(0, 0);
+        printf("[OpenRE4 Core] gameRoomInit: after EmMgr.create(0, 0)\n"); fflush(stdout);
         PlRegistRoomEff((PlEffRoom*) effRoom);
+        printf("[OpenRE4 Core] gameRoomInit: after PlRegistRoomEff\n"); fflush(stdout);
     }
+    printf("[OpenRE4 Core] gameRoomInit: EmMgr completed\n"); fflush(stdout);
     SmdSetup(-1);
+    printf("[OpenRE4 Core] gameRoomInit: SmdSetup completed\n"); fflush(stdout);
     ShdInit((ShdHeader*) GetDataExt(pG->pRoom, "SHD", 0));
+    printf("[OpenRE4 Core] gameRoomInit: ShdInit completed\n"); fflush(stdout);
     if ((p = GetDataExt(pG->pRoom, "EFF", 0)) != 0) {
         EspDataLoad((u32) p, EFF_ROOM, 0);
     }
@@ -489,6 +509,7 @@ void gameRoomInit()
     if ((p = GetDataExt(pG->pRoom, "ETS", 0)) != 0) {
         EtcModelListSet((EtcList*) p);
     }
+    printf("[OpenRE4 Core] gameRoomInit: Models & Cloth completed\n"); fflush(stdout);
     LightMgr.update(0, -1);
     FlrAtInit();
     SeAtInit();
@@ -502,12 +523,15 @@ void gameRoomInit()
     CamCtrl.CoreDataRead((u8*) CORE_ARC(CORE_CAMERA));
     CamCtrl.roomInit();
     View.roomInit();
+    printf("[OpenRE4 Core] gameRoomInit: Camera completed\n"); fflush(stdout);
     p = GetDataExt(pG->pRoom, "BLK", 0);
     Block.roomInit(p);
+    printf("[OpenRE4 Core] gameRoomInit: Block.roomInit completed\n"); fflush(stdout);
     if ((p = GetDataExt(pG->pRoom, "EVS", 0)) != 0) {
         EvtMgr.SetEvs(p);
     }
     EmSetRoomInit();
+    printf("[OpenRE4 Core] gameRoomInit: EmSetRoomInit completed\n"); fflush(stdout);
     RoomData.initRoomSet();
     SndRoomStartInit();
     ItemMgr.roomInit();
@@ -522,6 +546,7 @@ void gameRoomInit()
     cMes.roomInit();
     SndRoomBgmLoad();
     DbWork = new cDbWork;
+    printf("[OpenRE4 Core] gameRoomInit: Audio, UI & DbWork completed\n"); fflush(stdout);
     pG->Disp_flg = 0;
     if (SysFlagChk(pG, SYS_DOORDEMO)) {
         DpfFlagOn(pG, DPF_PL);
@@ -548,12 +573,18 @@ void gameRoomInit()
     SysFlagOff(pG, SYS_DOOR_AFTER);
     DbgFlagOff(pG, DBG_ROOMJMP);
     Block.check(0);
+    printf("[OpenRE4 Core] gameRoomInit: Block.check completed\n"); fflush(stdout);
     Filter09SetbUse(0, 1);
     fadeSetG(0x80000002, 0, 0, 0);
     fadeSetG(0x80000000, 20, 0, 0);
     SubScreenWait(15);
+    printf("[OpenRE4 Core] gameRoomInit: SubScreenWait completed\n"); fflush(stdout);
     SysFlagOff(pG, SYS_TRANS_STOP);
     DC.setNBlkStop(0);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[OpenRE4 Core] gameRoomInit COMPLETE -> Setting Rno0 = 3 (Active Pueblo Gameplay)!\n");
+    fflush(stdout);
+#endif
     pG->Rno0 = 3;
     pG->SaveKind = 0;
 }
@@ -567,6 +598,17 @@ void gameMainLoop()
     static f32 player_Seq_speed = 0.6f;
     int slow;
     int nObj;
+
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    static uint32_t game_loop_frames = 0;
+    if (++game_loop_frames % 60 == 0) {
+        if (pPL != NULL) {
+            printf("[OpenRE4 Gameplay] Pueblo Active Gameplay Frame #%u | Room: 0x%03X | Leon Pos: (%.1f, %.1f, %.1f) | HP: %d\n",
+                   game_loop_frames, pG->room_id, pPL->pos.x, pPL->pos.y, pPL->pos.z, pPL->hp);
+            fflush(stdout);
+        }
+    }
+#endif
 
     StaFlagOff(pG, STA_CUT_CHANGE);
     UpdateNearClipDist();
@@ -1529,19 +1571,26 @@ void primInit()
     do {
         pG->nPrim = pG->nPrim / 2;
 #line 2215 "D:/Bio4/Prog/game.cpp"
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        pG->prim_cnt = (uintptr_t) MEM_ALLOC(pG->nPrim * 2, 1, 13);
+        if (!pG->prim_cnt) {
+            pLog->err(0, 0, "workInit() PRIM BUFFER SIZE WAS REDUCE %08X", pG->nPrim);
+        }
+#else
         (pG->prim_cnt = (s32) MEM_ALLOC(pG->nPrim * 2, 1, 13));
         if ((u32) pG->prim_cnt < 0x80000000 || (u32) pG->prim_cnt > 0x82FFFFFF) {
             pLog->err(0, 0, "workInit() PRIM BUFFER SIZE WAS REDUCE %08X", pG->nPrim);
         }
+#endif
     } while (pG->prim_cnt == 0);
-    memclr_asm((void*) pG->prim_cnt, pG->nPrim * 2);
+    memclr_asm((void*) (uintptr_t) pG->prim_cnt, pG->nPrim * 2);
     SetPrimBuffPtr();
 }
 
 // Frees the primitive buffer.
 void primFree()
 {
-    Mem_free((void*) pG->prim_cnt);
+    Mem_free((void*) (uintptr_t) pG->prim_cnt);
     pG->prim_cnt = 0;
 }
 

@@ -23,6 +23,7 @@
 #include <dolphin/os.h>
 #include "pl_npc.h"
 #include "esp.h"
+#include <cstdio>
 #include "quake.h"
 #include "eprintf.h"
 #include "view.h"
@@ -288,9 +289,22 @@ CAM_FILE_HEADER* CameraControl::calcAddr(u8* head)
     AREA_DATA* area;
     CAMERA_DATA* cut;
 
+    printf("[OpenRE4 Debug] calcAddr: head=%p, ver=%.4s, nCdat=%d, nAdat=%d, nLdat=%d\n",
+           head, pBuff->Version, pBuff->nCdat, pBuff->nAdat, pBuff->nLdat);
+    u32* raw = (u32*) head;
+    printf("[OpenRE4 Debug] calcAddr raw[0..7]: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+           raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7]);
+    fflush(stdout);
+
     if (cameraDataVersion((char*) pBuff) <= 1) {
         return pBuff;
     }
+#if defined(OPENRE4_NATIVE)
+    u32* magic = (u32*) &pBuff->dummy[1];
+    if (*magic == 0x43414D50) { // 'CAMP'
+        return pBuff;
+    }
+#endif
     ver2 = 0;  // assigned after the early return: its `li` lands after the strncmp call
     if (strncmp((char*) pBuff, "B402", 4) == 0) {
         ver2 = 1;
@@ -299,6 +313,14 @@ CAM_FILE_HEADER* CameraControl::calcAddr(u8* head)
 
     rec = (CUT_INFO*) (pBuff + 1);
     for (i = 0; i < pBuff->nAdat; i++, rec++) {
+#if defined(OPENRE4_NATIVE)
+        u32 ofsAdat = __builtin_bswap32(rec->pAdat.addr);
+        rec->pAdat = (AREA_DATA*) (head + ofsAdat);
+        if (rec->pCdat.addr) {
+            u32 ofsCdat = __builtin_bswap32(rec->pCdat.addr);
+            rec->pCdat = (CAMERA_DATA*) (head + ofsCdat);
+        }
+#else
         if ((s32) rec->pAdat < 0) {
             return pBuff;
         }
@@ -306,11 +328,30 @@ CAM_FILE_HEADER* CameraControl::calcAddr(u8* head)
         if (rec->pCdat) {
             rec->pCdat = (CAMERA_DATA*) ((u32) rec->pCdat + (u32) pBuff);
         }
+#endif
     }
 
     area = (AREA_DATA*) rec;
     for (i = 0; i < pBuff->nAdat; i++, area++) {
+#if defined(OPENRE4_NATIVE)
+        u32* pDir = (u32*) &area->Dir; *pDir = __builtin_bswap32(*pDir);
+        u32* pH = (u32*) &area->Height; *pH = __builtin_bswap32(*pH);
+        u32* pY = (u32*) &area->Y; *pY = __builtin_bswap32(*pY);
+        area->nVer = (s32) __builtin_bswap32((u32) area->nVer);
+        u32 ofsVer = __builtin_bswap32(area->pVer.addr);
+        printf("[OpenRE4 Debug] calcAddr area %d: nVer=%d, ofsVer=0x%x\n", i, area->nVer, ofsVer);
+        fflush(stdout);
+        area->pVer = (Vec*) (head + ofsVer);
+        if (area->pVer && area->nVer > 0 && area->nVer < 100) {
+            for (int v = 0; v < area->nVer; v++) {
+                u32* vx = (u32*) &area->pVer[v].x; *vx = __builtin_bswap32(*vx);
+                u32* vy = (u32*) &area->pVer[v].y; *vy = __builtin_bswap32(*vy);
+                u32* vz = (u32*) &area->pVer[v].z; *vz = __builtin_bswap32(*vz);
+            }
+        }
+#else
         area->pVer = (Vec*) ((u32) area->pVer + (u32) pBuff);
+#endif
         if (ver2) {
             area->Attr = 3;
         }
@@ -327,12 +368,104 @@ CAM_FILE_HEADER* CameraControl::calcAddr(u8* head)
 
     cut = (CAMERA_DATA*) area;
     for (i = 0; i < pBuff->nCdat; i++, cut++) {
+#if defined(OPENRE4_NATIVE)
+        u32* ox = (u32*) &cut->offset.x; *ox = __builtin_bswap32(*ox);
+        u32* oy = (u32*) &cut->offset.y; *oy = __builtin_bswap32(*oy);
+        u32* oz = (u32*) &cut->offset.z; *oz = __builtin_bswap32(*oz);
+        u32* fr = (u32*) &cut->floor_ratio; *fr = __builtin_bswap32(*fr);
+        cut->nPoint = (s32) __builtin_bswap32((u32) cut->nPoint);
+        u32* cwords = (u32*) cut;
+        printf("[OpenRE4 Debug] cut %d words: ", i);
+        for (int w = 0; w < 13; w++) printf("%08x ", cwords[w]);
+        printf("\n");
+        fflush(stdout);
+
+        if (cut->pCampos.addr) {
+            u32 ofs = __builtin_bswap32(cut->pCampos.addr);
+            if (ofs > 0 && ofs < 0x20000) {
+                cut->pCampos = (Vec*) (head + ofs);
+                if (cut->nPoint > 0 && cut->nPoint < 1000) {
+                    for (int k = 0; k < cut->nPoint; k++) {
+                        u32* x = (u32*) &cut->pCampos[k].x; *x = __builtin_bswap32(*x);
+                        u32* y = (u32*) &cut->pCampos[k].y; *y = __builtin_bswap32(*y);
+                        u32* z = (u32*) &cut->pCampos[k].z; *z = __builtin_bswap32(*z);
+                    }
+                }
+            } else {
+                cut->pCampos = nullptr;
+            }
+        }
+        if (cut->pTarget.addr) {
+            u32 ofs = __builtin_bswap32(cut->pTarget.addr);
+            if (ofs > 0 && ofs < 0x20000) {
+                cut->pTarget = (Vec*) (head + ofs);
+                if (cut->nPoint > 0 && cut->nPoint < 1000) {
+                    for (int k = 0; k < cut->nPoint; k++) {
+                        u32* x = (u32*) &cut->pTarget[k].x; *x = __builtin_bswap32(*x);
+                        u32* y = (u32*) &cut->pTarget[k].y; *y = __builtin_bswap32(*y);
+                        u32* z = (u32*) &cut->pTarget[k].z; *z = __builtin_bswap32(*z);
+                    }
+                }
+            } else {
+                cut->pTarget = nullptr;
+            }
+        }
+        if (cut->pRoll.addr) {
+            u32 ofs = __builtin_bswap32(cut->pRoll.addr);
+            if (ofs > 0 && ofs < 0x20000) {
+                cut->pRoll = (f32*) (head + ofs);
+                if (cut->nPoint > 0 && cut->nPoint < 1000) {
+                    for (int k = 0; k < cut->nPoint; k++) {
+                        u32* r = (u32*) &cut->pRoll[k]; *r = __builtin_bswap32(*r);
+                    }
+                }
+            } else {
+                cut->pRoll = nullptr;
+            }
+        }
+        if (cut->pFovy.addr) {
+            u32 ofs = __builtin_bswap32(cut->pFovy.addr);
+            if (ofs > 0 && ofs < 0x20000) {
+                cut->pFovy = (f32*) (head + ofs);
+                if (cut->nPoint > 0 && cut->nPoint < 1000) {
+                    for (int k = 0; k < cut->nPoint; k++) {
+                        u32* fv = (u32*) &cut->pFovy[k]; *fv = __builtin_bswap32(*fv);
+                    }
+                }
+            } else {
+                cut->pFovy = nullptr;
+            }
+        }
+        if (cut->pFrame.addr) {
+            u32 ofs = __builtin_bswap32(cut->pFrame.addr);
+            if ((cut->Id == 6 || cut->Id == 7) && ofs > 0 && ofs < 0x20000) {
+                cut->pFrame = (u16*) (head + ofs);
+                if (cut->nPoint > 0 && cut->nPoint < 1000) {
+                    for (int k = 0; k < cut->nPoint; k++) {
+                        cut->pFrame[k] = __builtin_bswap16(cut->pFrame[k]);
+                    }
+                }
+            } else {
+                cut->pFrame = nullptr;
+            }
+        }
+#else
         cut->pCampos = (Vec*) ((u32) cut->pCampos + (u32) pBuff);
         cut->pTarget = (Vec*) ((u32) cut->pTarget + (u32) pBuff);
         cut->pRoll = (f32*) ((u32) cut->pRoll + (u32) pBuff);
         cut->pFovy = (f32*) ((u32) cut->pFovy + (u32) pBuff);
         cut->pFrame = (u16*) ((u32) cut->pFrame + (u32) pBuff);
+#endif
     }
+
+#if defined(OPENRE4_NATIVE)
+    LERP_DATA* lerp = (LERP_DATA*) cut;
+    for (i = 0; i < pBuff->nLdat; i++, lerp++) {
+        lerp->InterFrame = (s32) __builtin_bswap32((u32) lerp->InterFrame);
+    }
+    *magic = 0x43414D50;
+#endif
+
     return pBuff;
 }
 
@@ -417,7 +550,7 @@ int cameraHitCheck(Vec* pos, Vec* nrm, Vec* from, Vec* to)
         // COMPILER-DIFF: register pin (r29) plus launder. The pin keeps `at` out of cse's canonical class
         // (hard regs go last), so the copy loop's address is the `this` temporary; the launder gives `at` a
         // second set so the `at = this` copy is not propagated into the later field accesses.
-        register cAtariInfo* at asm("r29") = &atBuf;
+        register cAtariInfo* at = &atBuf;
         asm("" : "+r"(at));
         cCoord* parts;
         Vec w;

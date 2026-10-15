@@ -888,7 +888,7 @@ static void tBlockAreaInfo_Menu()
         }
         switch (pW->infoMenuCursor) {
         case 0: {
-            register int n asm("r11");  // COMPILER-DIFF: candidate #17 (global-alloc order of n vs the rep2 load)
+            register int n;  // COMPILER-DIFF: candidate #17 (global-alloc order of n vs the rep2 load)
 
             n = c->blockNo;
             if (Joy[0].rep2 & 0x20002) n++;
@@ -1510,4 +1510,6 @@ void tBlock_DebugCamera()
     }
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

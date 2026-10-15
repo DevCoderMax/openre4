@@ -334,4 +334,6 @@ void TplViewer()
     }
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .data; .balign 8");
+#endif

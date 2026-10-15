@@ -181,7 +181,7 @@ void cEmObj::setYarare(s16 no, f32 w, f32 h, f32 rad, Vec* pos, u16 flag, int cu
     // The original re-extends both narrow parameters at the calls because its compiler does not assume
     // promoted incoming arguments. Ours does, so the empty asms hide the promotion from combine and
     // `f` is pinned to flag's incoming r6 so the `ori` stays in place.
-    register int f asm("r6") = flag;
+    register int f = flag;
     int n = no;
     asm("" : "+r"(n));
     asm("" : "+r"(f));

@@ -58,6 +58,15 @@ void LightAreaInit()
 // Binds the room's SAR block.
 int LightAreaDataLoad(LightAreaHed* p)
 {
+#if defined(OPENRE4_NATIVE)
+    if (p && p->num > 0x1000) {
+        p->num = __builtin_bswap32(p->num);
+        for (u32 i = 0; i < p->num; i++) {
+            AreaHitDataConvertEndian(&p->data[i].area);
+            p->data[i].flag = __builtin_bswap32(p->data[i].flag);
+        }
+    }
+#endif
     g_pLightAreaHed = p;
     return 1;
 }
@@ -189,4 +198,6 @@ void LightAreaUpdateSub(cEm* em, int type)
     }
 }
 
+#ifndef OPENRE4_NATIVE
 asm(".section .sdata; .balign 8");
+#endif

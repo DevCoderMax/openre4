@@ -44,13 +44,19 @@
 // scalar, this unit defines Specular[9].
 int EspTrans();
 void EspgenTrans();
-// filter09.cpp defines it with no parameter; this unit passes one (vendor prototype), so it is declared locally under
-// the real symbol.
-void Filter09RenderI(int) asm("Filter09Render__Fv");
+void Filter09Render();
 void SetDrawTmpBufType(int type);   // game/TmpBuf.cpp (C++)
 
 // The renderer's view of pG+0x184..0x4F14: the stage counters, the skinning matrix palette, the
 // texture objects of the current model and the primitive buffer write pointer.
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+struct GxWork {
+    GXTexObj texObj[0xF8];
+    u8* prim;
+};
+static GxWork s_gxWork;
+#define GXWORK() (&s_gxWork)
+#else
 struct GxWork {
     GxStageWork stage;      // 0x000
     Mtx mtx[0xF8];          // 0x00C
@@ -58,6 +64,7 @@ struct GxWork {
     u8* prim;               // 0x4D8C
 };
 #define GXWORK() ((GxWork*) &pG->gxStage)
+#endif
 
 // Parts (cParts) fields past cCoord: the parts chain and the inverse bind matrix.
 struct cPartsWk {
@@ -80,14 +87,21 @@ struct cWeight {
     u8 padding;      // 0x07
 };
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#define PTR_INVALID(p) ((p) == nullptr)
+#define PTR_INVALID2(p) ((p) == nullptr)
+#else
 #define PTR_INVALID(p) ((s32) (p) >= 0 || (u32) (p) > 0x82FFFFFF)
 #define PTR_INVALID2(p) ((u32) (p) - 0x80000000 > 0x02FFFFFF)
+#endif
 
-// u8 -> f32 through GQR2 straight from memory: the compiler only emits psq_l from a stack slot.
+#if defined(__powerpc__) || defined(__ppc__)
 #define PSQ_L_U8(p) ({ f32 f_; asm volatile("psq_l %0,0(%1),1,2" : "=f"(f_) : "b"(p) : "memory"); f_; })
-// Loads straight into the named variable so the asm output shares the variable's (global) register
-// (espgen42/45 too; asm stays in the unit so asmcheck.py counts it).
 #define PSQ_L_U8_TO(dst, p) asm volatile("psq_l %0,0(%1),1,2" : "=f"(dst) : "b"(p) : "memory")
+#else
+#define PSQ_L_U8(p) ((f32)(*(const u8*)(p)))
+#define PSQ_L_U8_TO(dst, p) ((dst) = (f32)(*(const u8*)(p)))
+#endif
 
 // Bit test as 0 / 1 (matching helper).
 static inline int isBit(u32 f, u32 b)
@@ -829,7 +843,7 @@ int MakeWeightPaletteExt(cWeightExt* w0, int n)
                 rate = 1.0f - total;
             }
             total += rate;
-            s = (f32*) gx->mtx[w->WeightId[j]];
+            s = (f32*) pG->mtxPalette[w->WeightId[j]];
             m[0][0] += *s++ * rate;
             m[0][1] += *s++ * rate;
             m[0][2] += *s++ * rate;
@@ -881,7 +895,7 @@ int MakeWeightPalette(cWeight* w0, int n)
                 rate = 1.0f - total;
             }
             total += rate;
-            s = (f32*) gx->mtx[w->WeightId[j]];
+            s = (f32*) pG->mtxPalette[w->WeightId[j]];
             m[0][0] += *s++ * rate;
             m[0][1] += *s++ * rate;
             m[0][2] += *s++ * rate;
@@ -963,7 +977,7 @@ void Render()
     GXSetFog(0, 0.0f, 0.0f, ZNEAR, ZFAR, c);
     ExecOt(0x15);
     if (Filter09GetbUse() == 1) {
-        Filter09RenderI(0);
+        Filter09Render();
     }
     GXSetDrawSync(0xADEB);
     GXSetDrawSyncCallback(Render_DrawSyncCallback);
@@ -2414,13 +2428,40 @@ void SetPrimBuffPtr()
         return;
     }
     pG->DblBufIdx = pG->DblBufIdx ^ 1;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    pG->prim_base = (uintptr_t) ((u8*) (uintptr_t) pG->prim_cnt + pG->nPrim * pG->DblBufIdx);
+    gx->prim = (u8*) (uintptr_t) pG->prim_base;
+#else
     gx->prim = (u8*) pG->prim_cnt + pG->nPrim * pG->DblBufIdx;
+#endif
 }
 
 // Allocates `size` bytes (32-byte aligned) from this frame's primitive buffer; 0 when exhausted.
 void* GetPrimBuff(int size)
 {
     GxWork* gx = GXWORK();
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    u8* base = (u8*) (uintptr_t) pG->prim_cnt;
+    u8* limit;
+    u8* p;
+    u8* next;
+
+    if (PTR_INVALID(base)) {
+        pLog->err(0, 0, "GetPrimBuff() PTR ERR %p", base);
+        return 0;
+    }
+    limit = base + pG->nPrim * (pG->DblBufIdx + 1);
+    size = (size + 0x1F) / 32 * 32;
+    p = (u8*) (uintptr_t) pG->prim_base;
+    next = p + size;
+    if (limit < next) {
+        pLog->err(0, 0, "GetPrimBuff() : OVERFLOW");
+        return 0;
+    }
+    pG->prim_base = (uintptr_t) next;
+    gx->prim = next;
+    return p;
+#else
     u8* base = (u8*) pG->prim_cnt;
     u8* limit;
     u8* p;
@@ -2440,6 +2481,7 @@ void* GetPrimBuff(int size)
     }
     gx->prim = next;
     return p;
+#endif
 }
 
 // Resets the TEV / indirect / texgen state and the allocation counters (tev_stage, tev_reg,
@@ -2484,6 +2526,7 @@ static void primBuffDebugDisp(int n)
 // with the matrix palette in locked cache (0xE0000000, ROMtx 0x30 each). GQR6 holds the fixed point scale.
 void CalcSk1_x(void* dst, void* src, u32 n)
 {
+#if defined(__powerpc__) || defined(__ppc__)
     asm volatile(
         "lha 9, 6(4)\n"
         "subi 3, 3, 6\n"
@@ -2515,11 +2558,15 @@ void CalcSk1_x(void* dst, void* src, u32 n)
         "mulli 9, 9, 0x30\n"
         "addis 9, 9, 0xE000\n"
         "bdnz 1b\n");
+#else
+    (void)dst; (void)src; (void)n;
+#endif
 }
 
 // Same for s8 normals (s8 x/y/z + u8 matrix index, 4 bytes) into s8 x/y/z (3 bytes).
 void CalcSk1_x2(void* dst, void* src, u32 n)
 {
+#if defined(__powerpc__) || defined(__ppc__)
     asm volatile(
         "lbz 9, 3(4)\n"
         "subi 3, 3, 3\n"
@@ -2551,17 +2598,27 @@ void CalcSk1_x2(void* dst, void* src, u32 n)
         "mulli 9, 9, 0x30\n"
         "addis 9, 9, 0xE000\n"
         "bdnz 1b\n");
+#else
+    (void)dst; (void)src; (void)n;
+#endif
 }
 
 // Sets GQR6 (the paired-single quantisation register the skinning loads use).
 void setupGQR6(u32 v)
 {
+#if defined(__powerpc__) || defined(__ppc__)
     asm volatile("mtspr 918, %0" : : "r"(v));
+#else
+    (void)v;
+#endif
 }
 
 // Relocate a TPL whose texture headers also carry a CLUT (thermo palette).
 void CalcTplAddrC8(TEXPalette* tpl)
 {
+#if defined(OPENRE4_NATIVE)
+    UnpackTplNative(tpl);
+#else
     u32 i;
 
     if (tpl == 0) {
@@ -2580,6 +2637,7 @@ void CalcTplAddrC8(TEXPalette* tpl)
             td->CLUTHeader->data = (void*) ((u32) tpl + (u32) td->CLUTHeader->data);
         }
     }
+#endif
 }
 
 // Boot (CoreDataRead): the specular environment textures, the two indirect ramp textures and the
