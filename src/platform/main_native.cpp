@@ -7,11 +7,15 @@
 #include <aurora/dvd.h>
 #include <dolphin/dvd.h>
 #include <SDL3/SDL_scancode.h>
+#include <SDL3/SDL_timer.h>
 
 #include "main.h"
 #include "scheduler.h"
 #include "title.h"
 #include "global.h"
+#include "joy.h"
+
+bool openre4_boot_splash(float dt, bool skip);
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -156,6 +160,7 @@ int main(int argc, char* argv[]) {
     bool exiting = false;
     bool paused = false;
     uint32_t frameCount = 0;
+    uint64_t lastMs = SDL_GetTicks();
 
     printf("[OpenRE4 Core] Iniciando loop de quadros nativo...\n");
     while (!exiting) {
@@ -197,6 +202,18 @@ int main(int argc, char* argv[]) {
 
         bio4_frame();
         frameCount++;
+
+        // Splash de boot por cima do motor (some sozinho ou em qualquer tecla/botao).
+        {
+            uint64_t nowMs = SDL_GetTicks();
+            float dt = (float) (nowMs - lastMs) / 1000.0f;
+            lastMs = nowMs;
+            if (dt > 0.25f) {
+                dt = 0.25f;
+            }
+            bool skip = (Key.trg != 0) || (Joy[0].trg != 0);
+            openre4_boot_splash(dt, skip);
+        }
 
         if (frameCount <= 10 || frameCount % 60 == 0) {
             printf("[OpenRE4 Core] Rodando a 60 FPS nativo! Frame: %u\n", frameCount);

@@ -39,9 +39,24 @@ set(EM_SOURCES
     src/em12/em12_set.cpp
 )
 
+# Splash de boot: converte assets/boot.png em RGBA cru no momento do build.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if (Python3_FOUND)
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/boot_assets/boot.rgba ${CMAKE_BINARY_DIR}/boot_assets/boot.meta
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/make_boot_rgba.py ${CMAKE_BINARY_DIR}/boot_assets
+        DEPENDS ${CMAKE_SOURCE_DIR}/assets/boot.png ${CMAKE_SOURCE_DIR}/scripts/make_boot_rgba.py
+        COMMENT "Gerando splash de boot (boot.rgba)"
+    )
+    add_custom_target(openre4_boot_assets ALL
+        DEPENDS ${CMAKE_BINARY_DIR}/boot_assets/boot.rgba ${CMAKE_BINARY_DIR}/boot_assets/boot.meta
+    )
+endif ()
+
 # Executável do OpenRE4 Nativo
 add_executable(openre4
     src/platform/main_native.cpp
+    src/platform/boot_splash.cpp
     src/platform/dolphin_shims.cpp
     ${GAME_SOURCES}
     ${ST1_SOURCES}
