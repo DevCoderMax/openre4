@@ -9,6 +9,12 @@
 #include "math_sub.h"
 #include "rnd.h"
 #include "eprintf.h"
+#include <stdio.h>
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_scancode.h>
+#include <SDL3/SDL_events.h>
+#endif
 
 static inline void U64Set(u64& d, u64 v) { d = v; }
 
@@ -78,6 +84,101 @@ void PadRead()
     asm volatile("");                            // COMPILER-DIFF: #13 (sched barrier, no code)
     PADRead(Pad_data);
     PADClamp(Pad_data);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // Teclado PC direto via SDL3 (sem depender do roteamento do Aurora): o teclado conta
+    // sempre como controle 0 conectado; os bits entram em Pad_data[0] antes da traducao
+    // para Joy[]/Key[] abaixo, entao trg/rep funcionam normalmente.
+    {
+        int numkeys = 0;
+        SDL_PumpEvents();
+        const bool* ks = SDL_GetKeyboardState(&numkeys);
+        if (ks != NULL && numkeys > SDL_SCANCODE_L) {
+            u16 btn = 0;
+            if (ks[SDL_SCANCODE_SPACE]) {
+                btn |= 0x0100; // A
+            }
+            if (ks[SDL_SCANCODE_X] || ks[SDL_SCANCODE_ESCAPE]) {
+                btn |= 0x0200; // B
+            }
+            if (ks[SDL_SCANCODE_C]) {
+                btn |= 0x0400; // X
+            }
+            if (ks[SDL_SCANCODE_V]) {
+                btn |= 0x0800; // Y
+            }
+            if (ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER]) {
+                btn |= 0x1000; // START
+            }
+            if (ks[SDL_SCANCODE_TAB]) {
+                btn |= 0x0010; // Z
+            }
+            if (ks[SDL_SCANCODE_Q]) {
+                btn |= 0x0040; // L
+            }
+            if (ks[SDL_SCANCODE_E]) {
+                btn |= 0x0020; // R
+            }
+            if (ks[SDL_SCANCODE_UP]) {
+                btn |= 0x0008;
+            }
+            if (ks[SDL_SCANCODE_DOWN]) {
+                btn |= 0x0004;
+            }
+            if (ks[SDL_SCANCODE_LEFT]) {
+                btn |= 0x0001;
+            }
+            if (ks[SDL_SCANCODE_RIGHT]) {
+                btn |= 0x0002;
+            }
+            Pad_data[0].button = (u16) (Pad_data[0].button | btn);
+            // Analogico principal (WASD) e C-stick (IJKL)
+            int sx = 0, sy = 0, cx = 0, cy = 0;
+            if (ks[SDL_SCANCODE_A]) {
+                sx -= 80;
+            }
+            if (ks[SDL_SCANCODE_D]) {
+                sx += 80;
+            }
+            if (ks[SDL_SCANCODE_W]) {
+                sy += 80;
+            }
+            if (ks[SDL_SCANCODE_S]) {
+                sy -= 80;
+            }
+            if (ks[SDL_SCANCODE_J]) {
+                cx -= 80;
+            }
+            if (ks[SDL_SCANCODE_L]) {
+                cx += 80;
+            }
+            if (ks[SDL_SCANCODE_I]) {
+                cy += 80;
+            }
+            if (ks[SDL_SCANCODE_K]) {
+                cy -= 80;
+            }
+            if (sx != 0) {
+                Pad_data[0].stickX = (s8) sx;
+            }
+            if (sy != 0) {
+                Pad_data[0].stickY = (s8) sy;
+            }
+            if (cx != 0) {
+                Pad_data[0].substickX = (s8) cx;
+            }
+            if (cy != 0) {
+                Pad_data[0].substickY = (s8) cy;
+            }
+            if (ks[SDL_SCANCODE_Q]) {
+                Pad_data[0].triggerLeft = 180;
+            }
+            if (ks[SDL_SCANCODE_E]) {
+                Pad_data[0].triggerRight = 180;
+            }
+            Pad_data[0].err = 0; // teclado sempre conectado
+        }
+    }
+#endif
     for (i = 0; i < 4; i++) {
         u32 chan = PAD_CHAN0_BIT >> i;
         switch (Pad_data[i].err) {
@@ -403,6 +504,21 @@ void VibSetDataCore(VIB_INFO* d, u32 flag)
     int lvl;
     int add;
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // Tabelas do disco sao big-endian: desempatilha uma vez (idempotente: apos o swap,
+    // num fica pequeno e o ramo nao volta a executar).
+    if (d != NULL && d->num > 0xFF) {
+        d->num = __builtin_bswap32(d->num);
+        for (u32 k = 0; k < d->num && k < 64; k++) {
+            d->e[k].flag = __builtin_bswap16(d->e[k].flag);
+            d->e[k].delay = __builtin_bswap16(d->e[k].delay);
+            d->e[k].time = __builtin_bswap16(d->e[k].time);
+        }
+    }
+#endif
+    if (d == NULL) {
+        return;
+    }
     for (i = 0; i < d->num; i++) {
         v = PullVibWork();
         if (!v) {
@@ -410,6 +526,11 @@ void VibSetDataCore(VIB_INFO* d, u32 flag)
         }
         e = d->e;
         e += i;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        if (e->time == 0) {
+            continue; // x86 trava em divisao por zero (no PPC o resultado era 0)
+        }
+#endif
         lvl = e->s_level << 12;
         add = ((e->e_level - e->s_level) << 12) / e->time;
         v->flag = e->flag | flag;
@@ -423,10 +544,30 @@ void VibSetDataCore(VIB_INFO* d, u32 flag)
 // Plays pattern `no` of a rumble table (damage / weapon / event tables in the archives).
 void VibSetData(VibDataTbl* t, u32 no, u32 type)
 {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if (t == NULL) {
+        return;
+    }
+    // Tabela big-endian do disco: desempatilha uma vez (idempotente como acima).
+    if (t->num > 0xFF) {
+        u32 n = __builtin_bswap32(t->num);
+        if (n > 256) {
+            return; // dados invalidos: nao toca
+        }
+        t->num = n;
+        for (u32 k = 0; k < n; k++) {
+            t->ofs[k] = __builtin_bswap32(t->ofs[k]);
+        }
+    }
+    if (no < t->num && t->ofs[no]) {
+        VibSetDataCore((VIB_INFO*) ((u8*) t + t->ofs[no]), type);
+    }
+#else
     u32* ofs = t->ofs;
     if (no < t->num && ofs[no]) {
         VibSetDataCore((VIB_INFO*) ((u8*) t + ofs[no]), type);
     }
+#endif
 }
 
 // Cancels the running rumbles whose type has one of the low 4 bits of `type`.

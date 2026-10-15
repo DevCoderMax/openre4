@@ -39,12 +39,24 @@ u32* cBlock::getOtAddr()
 {
     u32 v;
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    while (pOt && (v = *pOt) != 0xFFFFFFFF) {
+        pOt = (u32*) OtLookup(v);
+        if (!pOt) {
+            break;
+        }
+        if ((s32) v < 0) {
+            return pOt;
+        }
+    }
+#else
     while ((v = *pOt) != 0xFFFFFFFF) {
         pOt = (u32*) (v | 0x80000000);
         if ((s32) v < 0) {
             return pOt;
         }
     }
+#endif
     return 0;
 }
 
@@ -152,7 +164,7 @@ int cBlock::checkBlockMemory()
     u32 j;
 
     for (i = 0; i < pData->nConnect; i++) {
-        BlockConnect* c = (BlockConnect*) (i * sizeof(BlockConnect) + (u32) pConnect);
+        BlockConnect* c = &pConnect[i];
         size = 0;
         if (c->flags & 1) {
             checkBlockConnect(c, pLink, &mramSet, &aramSet);
