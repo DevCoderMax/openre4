@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <ucontext.h>
+#include <unistd.h>
+#include "scheduler.h"
 
 extern "C" {
 
@@ -207,6 +209,8 @@ BOOL OSRestoreInterrupts(BOOL level) { return level; }
 s32 OSEnableScheduler(void) { return 0; }
 struct NativeFiberInfo {
     ucontext_t ctx;
+    ucontext_t* resumeCtx;  // context of whoever resumed this fiber (coroutine chain)
+    OSThread* resumeThread; // fiber (or main) that resumed us; restored on yield
     void* (*func)(void*);
     void* param;
     void* allocatedStack;
@@ -215,8 +219,38 @@ struct NativeFiberInfo {
 };
 
 static ucontext_t s_mainContext;
+static ucontext_t* s_mainResumeCtx;  // where the main fiber returns when a task yields back
+static void* s_lastMainSetBy;
+static int s_lastMainSetKind;  // 1 = OSResumeThread(fiber), 2 = FiberYieldBack
+struct FiberRingEntry { int kind; int from; int to; void* ra; };
+static FiberRingEntry s_ring[64];
+static int s_ringPos;
+
+static int FiberTaskNo(OSThread* th) {
+    for (int i = 0; i < TASK_NUM; i++) {
+        if (&Task[i].Thread == th) return i;
+    }
+    return -2;
+}
+static void FiberRingPush(int kind, int from, int to) {
+    FiberRingEntry* e = &s_ring[s_ringPos];
+    e->kind = kind;
+    e->from = from;
+    e->to = to;
+    e->ra = __builtin_return_address(0);
+    s_ringPos = (s_ringPos + 1) & 63;
+}
 static OSThread s_mainThread;
 static OSThread* s_currentThread = &s_mainThread;
+
+// Yields `thread` back to whoever resumed it (stack-like coroutine chain; supports nesting,
+// e.g. sce_sys.cpp calling TaskSchedulerMain from inside the game task).
+static void FiberYieldBack(OSThread* thread) {
+    NativeFiberInfo* info = (NativeFiberInfo*) thread->specific[0];
+    ucontext_t* back = info->resumeCtx ? info->resumeCtx : &s_mainContext;
+    s_currentThread = info->resumeThread ? info->resumeThread : &s_mainThread;
+    swapcontext(&info->ctx, back);
+}
 
 static void FiberTrampoline(uint32_t lo, uint32_t hi) {
     uintptr_t ptr = ((uintptr_t)hi << 32) | lo;
@@ -229,7 +263,7 @@ static void FiberTrampoline(uint32_t lo, uint32_t hi) {
         info->active = false;
     }
     s_currentThread = &s_mainThread;
-    setcontext(&s_mainContext);
+    setcontext(info && info->resumeCtx ? info->resumeCtx : &s_mainContext);
 }
 
 void OSCancelThread(OSThread* thread) {
@@ -276,8 +310,7 @@ void OSExitThread(void* val) {
             info->exited = true;
             info->active = false;
         }
-        s_currentThread = &s_mainThread;
-        swapcontext(&info->ctx, &s_mainContext);
+        FiberYieldBack(s_currentThread);
     }
 }
 
@@ -288,18 +321,21 @@ OSThread* OSGetCurrentThread(void) {
 s32 OSResumeThread(OSThread* thread) {
     if (!thread) return 0;
     if (thread == &s_mainThread) {
-        if (s_currentThread != &s_mainThread) {
-            NativeFiberInfo* cur_info = (NativeFiberInfo*) s_currentThread->specific[0];
-            s_currentThread = &s_mainThread;
-            swapcontext(&cur_info->ctx, &s_mainContext);
-        }
+        // Native fibers: tasks always return to their resumer via OSSleepThread/OSExitThread.
         return 0;
     }
 
     NativeFiberInfo* info = (NativeFiberInfo*) thread->specific[0];
-    if (info && info->active && !info->exited) {
+    if (info && info->active) {
+        ucontext_t save;
+        bool fromMain = (s_currentThread == &s_mainThread);
+        info->resumeThread = s_currentThread;
         s_currentThread = thread;
-        swapcontext(&s_mainContext, &info->ctx);
+        info->resumeCtx = &save;
+        if (fromMain) {
+            s_mainResumeCtx = &save;
+        }
+        swapcontext(&save, &info->ctx);
     }
     return 0;
 }
@@ -307,9 +343,22 @@ s32 OSResumeThread(OSThread* thread) {
 void OSSleepThread(OSThreadQueue* queue) {
     (void)queue;
     if (s_currentThread && s_currentThread != &s_mainThread) {
-        NativeFiberInfo* info = (NativeFiberInfo*) s_currentThread->specific[0];
-        s_currentThread = &s_mainThread;
-        swapcontext(&info->ctx, &s_mainContext);
+        FiberYieldBack(s_currentThread);
+    } else {
+        static int warned = 0;
+        if (warned++ < 3) {
+            char b[256];
+            int n = snprintf(b, sizeof(b), "[FIBERDBG] sleep skipped (pCTask=%d cur=%p):\n",
+                             (pCTask && (uintptr_t) pCTask > 0x1000) ? (int) pCTask->Task_no : -1,
+                             (void*) s_currentThread);
+            if (n > 0) (void) write(2, b, (size_t) n);
+            for (int k = 1; k <= 24; k++) {
+                FiberRingEntry* e = &s_ring[(s_ringPos - k) & 63];
+                if (e->kind == 0) continue;
+                n = snprintf(b, sizeof(b), "  ring[%d] kind=%d from=%d to=%d ra=%p\n", -k, e->kind, e->from, e->to, e->ra);
+                if (n > 0) (void) write(2, b, (size_t) n);
+            }
+        }
     }
 }
 
@@ -318,9 +367,7 @@ s32 OSSuspendThread(OSThread* thread) {
         return 0;
     }
     if (thread == s_currentThread && s_currentThread != &s_mainThread) {
-        NativeFiberInfo* info = (NativeFiberInfo*) s_currentThread->specific[0];
-        s_currentThread = &s_mainThread;
-        swapcontext(&info->ctx, &s_mainContext);
+        FiberYieldBack(s_currentThread);
     }
     return 0;
 }

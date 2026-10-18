@@ -33,6 +33,7 @@
 #include "obj.h"
 #include "obj18.h"
 #include "em.h"
+#include "dmg.h"
 #include "player.h"
 #include "pl_sub.h"
 #include "mes.h"
@@ -795,11 +796,19 @@ int Event::ExePacket()
             }
         }
     }
-    if (packetTbl[pPacket->id](this) == 0) {
-        pLog->err(0, 0, "Event::ExePacket : exec error");
-        return 0;
+    {
+        void* before = (void*) DmgMgr.pArray;
+        printf("[EVTDBG] pkt id=%d size=%d\n", pPacket->id, (int) pPacket->size);
+        fflush(stdout);
+        int r = packetTbl[pPacket->id](this);
+        printf("[EVTDBG] after pkt %d: pArray %p -> %p nArray=%u\n", pPacket->id, before, (void*) DmgMgr.pArray, DmgMgr.nArray);
+        fflush(stdout);
+        if (r == 0) {
+            pLog->err(0, 0, "Event::ExePacket : exec error");
+            return 0;
+        }
+        return 1;
     }
-    return 1;
 }
 
 // Packet 0 (BeginEvt): nothing to do (the begin work is ExeBeginEvt).
@@ -1302,7 +1311,10 @@ int Event::ExePacket_Lit(Event* pEvt)
         }
     }
     pEvt->pLit = dat;
-    LightMgr.roomLitSet(dat);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    ((cLit*) dat)->convertEndian();
+#endif
+    LightMgr.roomLitSet((cLit*) dat);
     LightMgr.update(0, -1);
     return 1;
 }
@@ -2416,7 +2428,7 @@ int EventMgr::EvtReadExec(char* pNameEvt, int emId, u32 evtReadFlag)
         SceSleep(2);
     }
     if (EvtReadMram(pNameEvt, emId, &addr, 0, 0)) {
-        if (EvtMgr.SetEvt((void*) addr, &evt)) {
+        if (EvtMgr.SetEvt((void*) (uintptr_t) (u32) addr, &evt)) {
             if (evtReadFlag & EvtReadFlagDiedemo) {
                 evt->FlgOnStatus(EvtStfEndSleepOrder);
                 evt->FlgOnStatus(EvtStfDiedemo);
@@ -2507,6 +2519,118 @@ void EventMgr::ToolCoreEvdDel()
     BinTbl.DelAll(0);
 }
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+// evd files are big-endian; swap the fields the parser reads. Idempotent: pad_38[1] is 0 in every
+// file and becomes the 0x39 marker after conversion.
+// .fcs/.fog bins hold HERMITE_1_FIX curves stored big-endian on the disc: swap the key count,
+// the keys of each curve and (for DatFocus) the level floats. Idempotent through the key-count
+// range check: an already-swapped count lands outside 0..64.
+static void EvtHermiteFixConvEndian(HERMITE_1_FIX* c)
+{
+    s32 n;
+    int k;
+
+    n = (s32) __builtin_bswap32((u32) c->nPoint);
+    if (n < 0 || n > 64) {
+        return;
+    }
+    c->nPoint = n;
+    for (k = 0; k < n; k++) {
+        HERMITE_1_POINT* pt = &c->Point[k];
+        pt->T = __builtin_bit_cast(f32, __builtin_bswap32(__builtin_bit_cast(u32, pt->T)));
+        pt->Q = __builtin_bit_cast(f32, __builtin_bswap32(__builtin_bit_cast(u32, pt->Q)));
+        pt->dQ[0] = __builtin_bit_cast(f32, __builtin_bswap32(__builtin_bit_cast(u32, pt->dQ[0])));
+        pt->dQ[1] = __builtin_bit_cast(f32, __builtin_bswap32(__builtin_bit_cast(u32, pt->dQ[1])));
+    }
+}
+
+static void EvtDataConvEndian(EvtHeader* hdr)
+{
+    EvtBinEntry* e;
+    EvtPacket* p;
+    u8* end;
+    int i;
+
+    if (hdr->pad_38[1] == 0x39) {
+        return;
+    }
+    hdr->sndFlag = (s32) __builtin_bswap32((u32) hdr->sndFlag);
+    hdr->pacOfs = __builtin_bswap32(hdr->pacOfs);
+    hdr->pacSize = __builtin_bswap32(hdr->pacSize);
+    hdr->nBin = (s32) __builtin_bswap32((u32) hdr->nBin);
+    hdr->binOfs = __builtin_bswap32(hdr->binOfs);
+    e = (EvtBinEntry*) (hdr->binOfs + (u32) hdr);
+    for (i = 0; i < hdr->nBin; i++) {
+        e[i].ofs = __builtin_bswap32(e[i].ofs);
+    }
+    p = (EvtPacket*) (hdr->pacOfs + (u32) hdr);
+    end = (u8*) hdr + hdr->pacOfs + hdr->pacSize;
+    while ((u8*) p + 0x10 <= end) {
+        p->id = (int) __builtin_bswap32((u32) p->id);
+        p->flag = __builtin_bswap32(p->flag);
+        p->cut = (s16) __builtin_bswap16((u16) p->cut);
+        p->frame = (s16) __builtin_bswap16((u16) p->frame);
+        p->size = (s16) __builtin_bswap16((u16) p->size);
+        if (p->size <= 0) {
+            break;
+        }
+        switch (p->id) {
+        case EvpTpPos:
+        case EvpTpPosPl:
+            if (p->size >= 0x34) {
+                p->pos.pos[0] = (s32) __builtin_bswap32((u32) p->pos.pos[0]);
+                p->pos.pos[1] = (s32) __builtin_bswap32((u32) p->pos.pos[1]);
+                p->pos.pos[2] = (s32) __builtin_bswap32((u32) p->pos.pos[2]);
+            }
+            if (p->size >= 0x40) {
+                p->pos.rot[0] = (s32) __builtin_bswap32((u32) p->pos.rot[0]);
+                p->pos.rot[1] = (s32) __builtin_bswap32((u32) p->pos.rot[1]);
+                p->pos.rot[2] = (s32) __builtin_bswap32((u32) p->pos.rot[2]);
+            }
+            if (p->size >= 0x44) {
+                p->pos.partsNo = (s32) __builtin_bswap32((u32) p->pos.partsNo);
+            }
+            break;
+        case EvpTpCamDammy:
+        case EvpTpStr:
+        case EvpTpSe:
+        case EvpTpMes:
+        case EvpTpFunc:
+        case EvpTpFade:
+            if (p->size >= 0x14) {
+                p->val.no = (s32) __builtin_bswap32((u32) p->val.no);
+            }
+            if (p->size >= 0x18) {
+                p->val.arg = (s32) __builtin_bswap32((u32) p->val.arg);
+            }
+            if (p->size >= 0x1C) {
+                p->val.time = (s32) __builtin_bswap32((u32) p->val.time);
+            }
+            break;
+        case EvpTpEsp:
+            if (p->size >= 0x20) {
+                p->esp.type = (s32) __builtin_bswap32((u32) p->esp.type);
+            }
+            break;
+        }
+        p = (EvtPacket*) ((u8*) p + p->size);
+    }
+    for (i = 0; i < hdr->nBin; i++) {
+        const char* nm = e[i].name;
+        size_t len = strlen(nm);
+
+        if (len >= 4 && (memcmp(nm + len - 4, ".fcs", 4) == 0 || memcmp(nm + len - 4, ".fog", 4) == 0)) {
+            DatFocus* f = (DatFocus*) ((u8*) hdr + e[i].ofs);
+            EvtHermiteFixConvEndian(&f->ScurveNear);
+            EvtHermiteFixConvEndian(&f->ScurveFar);
+            f->LevelNear = __builtin_bit_cast(f32, __builtin_bswap32(__builtin_bit_cast(u32, f->LevelNear)));
+            f->LevelFar = __builtin_bit_cast(f32, __builtin_bswap32(__builtin_bit_cast(u32, f->LevelFar)));
+        }
+    }
+    hdr->pad_38[1] = 0x39;
+}
+#endif
+
 // Starts an event from a loaded "event" block: validates the tag, registers it (SetEvd) and creates
 // the Event; *key receives it. Refused while Stop_flg 0x400 or Debug_flg[3] 0x80.
 int EventMgr::SetEvt(void* data, Event** ppEvt)
@@ -2527,10 +2651,18 @@ int EventMgr::SetEvt(void* data, Event** ppEvt)
         pLog->err(0, 0, "EventMgr::SetEvs : non addr[%x]", hdr);
         return 0;
     }
-    if (*(u32*) hdr->tag != 0x6576656E || hdr->tag[4] != 't') {
+    fprintf(stderr, "[EVTDBG] SetEvt data=%p\n", (void*) hdr);
+    if (memcmp(hdr->tag, "even", 4) != 0 || hdr->tag[4] != 't') {
+        fprintf(stderr, "[EVTDBG] SetEvt tag=%02x%02x%02x%02x%02x%02x%02x%02x\n",
+                (unsigned char) hdr->tag[0], (unsigned char) hdr->tag[1], (unsigned char) hdr->tag[2],
+                (unsigned char) hdr->tag[3], (unsigned char) hdr->tag[4], (unsigned char) hdr->tag[5],
+                (unsigned char) hdr->tag[6], (unsigned char) hdr->tag[7]);
         pLog->err(0, 0, "EventMgr::SetEvt : invalid data");
         return 0;
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    EvtDataConvEndian(hdr);
+#endif
     if (EvtMgr.SetEvd((char*) hdr, hdr, 0, 2) == 0) {
         pLog->err(0, 0, "EventMgr::SetEvt : SetEvd failed[%s]", hdr);
         return 0;
@@ -2707,7 +2839,7 @@ int EventMgr::SetEvd(char* nm, void* data, void* dat2, int flag)
         pLog->err(0, 0, "EventMgr::SetEvd : non addr[%s]", nm);
         return 0;
     }
-    if (*(u32*) hdr->tag != 0x6576656E || hdr->tag[4] != 't') {
+    if (memcmp(hdr->tag, "even", 4) != 0 || hdr->tag[4] != 't') {
         pLog->err(0, 0, "EventMgr::SetEvd : invalid data[%s]", nm);
         return 0;
     }
@@ -2839,21 +2971,22 @@ int EventMgr::SetRead(char* nm, int* wkNo, void* unit)
 int EventMgr::GetRead(void** pDat, int* pWkNo, char* pName)
 {
     u8 type;
-    int d;
+    void* d;
+    int no;
 
     if (pDat == 0 || pWkNo == 0) {
         return 0;
     }
     *pDat = 0;
     *pWkNo = 0;
-    if (ReadTbl.GetDat((void**) &d, &type, pName, 0) == 0) {
+    if (ReadTbl.GetDat(&d, &type, pName, 0) == 0) {
         return 0;
     }
-    *pDat = (void*) d;
-    if (ReadTbl.GetWkNo(&d, pName) == 0) {
+    *pDat = d;
+    if (ReadTbl.GetWkNo(&no, pName) == 0) {
         return 0;
     }
-    *pWkNo = d;
+    *pWkNo = no;
     return 1;
 }
 

@@ -67,10 +67,12 @@ struct GxWork {
 #endif
 
 // Parts (cParts) fields past cCoord: the parts chain and the inverse bind matrix.
+// x64 layout: cUnit is 0x18 (4 flag + 4 pad + 8 next + 8 vptr) instead of the PS2 0x0C, so
+// every class offset shifts by +0x14 at the end of cCoord (0xF4 -> 0x108, 0xF8 -> 0x110).
 struct cPartsWk {
-    u8 pad_0[0xF4];
-    cPartsWk* next;  // 0xF4
-    Mtx bindMat;     // 0xF8
+    u8 pad_0[0x108];
+    cPartsWk* next;  // 0x108 (PS2 0xF4)
+    Mtx bindMat;     // 0x110 (PS2 0xF8)
 };
 
 // Skinning weights: up to 3 matrices per vertex.
@@ -281,8 +283,9 @@ public:
     int getID()
     {
         static int tbl[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-        if (no > 15) {
+        if (no < 0 || no > 15) {
             pLog->err(0, 0, "TevStage over!");
+            return 0;
         }
         return tbl[no];
     }
@@ -294,8 +297,9 @@ public:
     int getID()
     {
         static int tbl[4] = {0, 1, 2, 3};
-        if (no > 3) {
+        if (no < 0 || no > 3) {
             pLog->err(0, 0, "IndStage over!");
+            return 0;
         }
         return tbl[no];
     }
@@ -805,6 +809,14 @@ void calcWeightMat(cModel* m)
     u32 i = 0;
     cPartsWk* p;
 
+    if ((uintptr_t) m->pList < 0x1000 || (uintptr_t) m->pList > 0x90000000) {
+        static int n = 0;
+        if (n++ < 6) {
+            printf("[WDBG] calcWeightMat bad pList=%p m=%p\n", (void*) m->pList, (void*) m);
+            fflush(stdout);
+        }
+        return;
+    }
     PSMTXInverse(m->pList->mat, inv);
     for (p = (cPartsWk*) m->pList; p != 0; p = p->next) {
         PSMTXConcat(inv, ((cModel*) p)->mat, tmp);
@@ -1075,6 +1087,7 @@ void commonModelTrans(cModel* m, cModelInfo* info, Mtx viewMat, int flag)
         u16 nParts;
         cPolyHeader* part;
         u32 i;
+        u32 nv;
 
         if (!StaFlagChk(pG, STA_PROC_SHD_TEX) && m->ot_type == 7) {
             if (m->be_flag & 0x08000000) {
@@ -1134,6 +1147,27 @@ void commonModelTrans(cModel* m, cModelInfo* info, Mtx viewMat, int flag)
         GXLoadNrmMtxImm(nrm, 0);
         GXSetCurrentMtx(0);
         tex = d->pTex;
+        nv = d->nVtx;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        {
+            static int mdbg = 0;
+            static float seen[48][3];
+            static int nseen = 0;
+            if (mdbg < 400) {
+                int dup = 0;
+                for (int si = 0; si < nseen; si++) {
+                    if (fabsf(seen[si][0]-pm[0][3]) < 1.0f && fabsf(seen[si][1]-pm[1][3]) < 1.0f && fabsf(seen[si][2]-pm[2][3]) < 1.0f) { dup = 1; break; }
+                }
+                if (!dup && nseen < 48) {
+                    seen[nseen][0]=pm[0][3]; seen[nseen][1]=pm[1][3]; seen[nseen][2]=pm[2][3];
+                    nseen++;
+                    printf("[MODELDBG] pmT=(%.1f,%.1f,%.1f) nVtx=%u m=%p\n", pm[0][3], pm[1][3], pm[2][3], d->nVtx, (void*)m);
+                    fflush(stdout);
+                }
+                mdbg++;
+            }
+        }
+#endif
         GXClearVtxDesc();
         GXSetVtxDesc(9, 3);
         GXSetVtxDesc(10, 3);
@@ -1148,25 +1182,25 @@ void commonModelTrans(cModel* m, cModelInfo* info, Mtx viewMat, int flag)
             GXSetVtxAttrFmt(0, 13, 1, 3, 8);
             GXSetVtxDesc(11, 3);
             GXSetVtxAttrFmt(0, 11, 1, 5, 0);
-            GXSetArray(11, clr, 4);
+            GXSetArraySized(11, clr, nv * 4, 4);
         } else {
             GXSetVtxAttrFmt(0, 13, 1, 2, 15);
         }
-        GXSetArray(13, tex, 4);
+        GXSetArraySized(13, tex, nv * 4, 4);
         GXSetVtxAttrFmt(0, 9, 1, 3, d->shift);
         if ((m->be_flag & 0x4000) || (d->weight_palette_num <= 1 && d->weight_ext_num <= 0xFF && !(info->be_flag & 2) && d->nParts == 1)) {
-            GXSetArray(9, d->vtxOrig, 8);
+            GXSetArraySized(9, d->vtxOrig, nv * 8, 8);
             if (d->flags & 0x20000000) {
-                GXSetArray(10, d->nrmOrig, 4);
+                GXSetArraySized(10, d->nrmOrig, nv * 4, 4);
             } else {
-                GXSetArray(10, d->nrmOrig, 8);
+                GXSetArraySized(10, d->nrmOrig, nv * 8, 8);
             }
         } else {
-            GXSetArray(9, info->pPosBuf[pG->DblBufIdx], 6);
+            GXSetArraySized(9, info->pPosBuf[pG->DblBufIdx], nv * 6, 6);
             if (d->flags & 0x20000000) {
-                GXSetArray(10, info->pNrmBuf[pG->DblBufIdx], 3);
+                GXSetArraySized(10, info->pNrmBuf[pG->DblBufIdx], nv * 3, 3);
             } else {
-                GXSetArray(10, info->pNrmBuf[pG->DblBufIdx], 6);
+                GXSetArraySized(10, info->pNrmBuf[pG->DblBufIdx], nv * 6, 6);
             }
         }
         switch (m->CullMode) {

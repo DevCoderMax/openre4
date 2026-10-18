@@ -297,6 +297,11 @@ void ProcessTickGet(int no, const char* pProc_name)
         proc_tick[no] = OSGetTick() - zero_tick;
         proc_name[no] = pProc_name;
     } else {
+        // Native: the game task can run several frames per render frame (slow software GPU), so the
+        // tick list outgrows proc_tick[32]. The PS2/GC build never hit this: clamp to the array.
+        if (proc_tick_idx > 32 - 6) {
+            return;
+        }
         proc_tick[proc_tick_idx + 5] = OSGetTick() - zero_tick;
         proc_name[proc_tick_idx + 5] = pProc_name;
         proc_tick_idx++;

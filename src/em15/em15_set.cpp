@@ -14,6 +14,7 @@ void Em15Init(cEm* em);
 void Em15Set(cEm10* em);
 void Em15WeaponSet(cEm10* em);
 
+#if !defined(OPENRE4_NATIVE)
 // Module entry (SN loader): registers Em15Init as the DOL's enemy constructor (EmInitFunc) and Em15Set as
 // em10.cpp's per-enemy set function (Em10SetFunc).
 extern "C" void _prolog()
@@ -32,6 +33,7 @@ extern "C" void _epilog()
 extern "C" void _unresolved()
 {
 }
+#endif
 
 // EmInitFunc of the module: constructs the shared cEm10 class in the manager's work (em10_R0_Init then
 // builds the enemy through Em10SetFunc).

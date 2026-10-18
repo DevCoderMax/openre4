@@ -217,10 +217,13 @@ struct TPL_Disc_ClutHeader {
 
 void UnpackTplNative(TEXPalette* tpl)
 {
-    if (tpl == NULL) {
+    if (tpl == NULL || ((uintptr_t)tpl & 3)) {
         return;
     }
     if (tpl->version == 0x12345678) {
+        return;
+    }
+    if (tpl->version != 0x30AF2000 && tpl->version != 0x0020AF30) {
         return;
     }
 
@@ -230,6 +233,9 @@ void UnpackTplNative(TEXPalette* tpl)
     if (tpl->version == 0x30AF2000) {
         numDescriptors = __builtin_bswap32(numDescriptors);
         desc_ofs = __builtin_bswap32(desc_ofs);
+    }
+    if (numDescriptors == 0 || numDescriptors > 2048 || desc_ofs >= 0x02000000) {
+        return;
     }
 
     TEXDescriptor* native_descs = (TEXDescriptor*) calloc(numDescriptors, sizeof(TEXDescriptor));
@@ -244,7 +250,7 @@ void UnpackTplNative(TEXPalette* tpl)
             clut_ofs = __builtin_bswap32(clut_ofs);
         }
 
-        if (th_ofs != 0) {
+        if (th_ofs != 0 && th_ofs < 0x02000000) {
             TPL_Disc_TexHeader* dth = (TPL_Disc_TexHeader*) (base + th_ofs);
             TEXHeader* th = (TEXHeader*) calloc(1, sizeof(TEXHeader));
             if (tpl->version == 0x30AF2000) {
@@ -252,7 +258,7 @@ void UnpackTplNative(TEXPalette* tpl)
                 th->width = __builtin_bswap16(dth->width);
                 th->format = __builtin_bswap32(dth->format);
                 u32 dataOfs = __builtin_bswap32(dth->dataOfs);
-                th->data = base + dataOfs;
+                th->data = (dataOfs < 0x02000000) ? (base + dataOfs) : NULL;
                 th->wrapS = __builtin_bswap32(dth->wrapS);
                 th->wrapT = __builtin_bswap32(dth->wrapT);
                 th->minFilter = __builtin_bswap32(dth->minFilter);
@@ -262,7 +268,7 @@ void UnpackTplNative(TEXPalette* tpl)
                 th->height = dth->height;
                 th->width = dth->width;
                 th->format = dth->format;
-                th->data = base + dth->dataOfs;
+                th->data = (dth->dataOfs < 0x02000000) ? (base + dth->dataOfs) : NULL;
                 th->wrapS = dth->wrapS;
                 th->wrapT = dth->wrapT;
                 th->minFilter = dth->minFilter;
@@ -276,18 +282,18 @@ void UnpackTplNative(TEXPalette* tpl)
             native_descs[i].textureHeader = th;
         }
 
-        if (clut_ofs != 0) {
+        if (clut_ofs != 0 && clut_ofs < 0x02000000) {
             TPL_Disc_ClutHeader* dclut = (TPL_Disc_ClutHeader*) (base + clut_ofs);
             CLUTHeader* clut = (CLUTHeader*) calloc(1, sizeof(CLUTHeader));
             if (tpl->version == 0x30AF2000) {
                 clut->numEntries = __builtin_bswap16(dclut->numEntries);
                 clut->format = (GXTlutFmt) __builtin_bswap32(dclut->format);
                 u32 cdataOfs = __builtin_bswap32(dclut->dataOfs);
-                clut->data = base + cdataOfs;
+                clut->data = (cdataOfs < 0x02000000) ? (base + cdataOfs) : NULL;
             } else {
                 clut->numEntries = dclut->numEntries;
                 clut->format = (GXTlutFmt) dclut->format;
-                clut->data = base + dclut->dataOfs;
+                clut->data = (dclut->dataOfs < 0x02000000) ? (base + dclut->dataOfs) : NULL;
             }
             clut->unpacked = 1;
             native_descs[i].CLUTHeader = clut;

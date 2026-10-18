@@ -312,8 +312,8 @@ void Espgen43_TransSub(cEspgen* pGen)
     GXSetVtxAttrFmt(0, 9, 1, 4, 0);
     GXSetVtxAttrFmt(0, 10, 0, 4, 0);
     GXSetVtxAttrFmt(0, 13, 1, 4, 0);
-    GXSetArray(9, p->pHeightBuf, sizeof(Vec));
-    GXSetArray(10, p->pNorBuf, sizeof(Vec));
+    GXSetArraySized(9, p->pHeightBuf, sizeof(Vec) * (p->Width + 1) * (p->Height + 1), sizeof(Vec));
+    GXSetArraySized(10, p->pNorBuf, sizeof(Vec) * (p->Width + 1) * (p->Height + 1), sizeof(Vec));
     GXCallDisplayList(p->pDisplayList, p->Dpl_size);
 }
 

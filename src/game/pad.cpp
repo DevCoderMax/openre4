@@ -177,6 +177,16 @@ void PadRead()
             }
             Pad_data[0].err = 0; // teclado sempre conectado
         }
+        // Botoes virtuais do menu nativo (menu_native.cpp): valem por um frame.
+        {
+            extern unsigned openre4_menu_consume();
+            unsigned lat = openre4_menu_consume();
+            if (lat != 0) {
+                printf("[OpenRE4 Diag] latch consumed: %x -> Joy.on will OR\n", lat);
+                fflush(stdout);
+            }
+            Pad_data[0].button = (u16) (Pad_data[0].button | lat);
+        }
     }
 #endif
     for (i = 0; i < 4; i++) {
@@ -388,6 +398,17 @@ void PadRead()
         KeyStopFlagClear();
     }
     VibControl();
+}
+
+// Leituras de debug para o overlay do menu nativo (menu_native.cpp).
+unsigned long long openre4_dbg_keytrg()
+{
+    return (unsigned long long) Key.trg;
+}
+
+unsigned openre4_dbg_joyon()
+{
+    return (unsigned) Joy[0].on;
 }
 
 // Blocks all keys except `mask` until the stop flag is cleared (Stop_flg bit31) — events / menus.

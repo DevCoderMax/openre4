@@ -11,6 +11,8 @@
 #include "main_sub.h"
 #include "scheduler.h"
 #include "dvd.h"
+
+extern "C" void DvdDumpState(int id);
 #include "db_log.h"
 #include "eprintf.h"
 #include "player.h"
@@ -163,8 +165,26 @@ void ReadAreaData()
         StopwatchStart();
 #line 147 "D:/Bio4/Prog/read.cpp"
         req = DVD_READ_N(name, (void*) ((u32) MemGetHeapEndAddr(MemGetCurrentHeap()) - READ_BUFF_OFS), 0, 0, 0, 0x8120);
-        while (Dvd.ReadCheck(req, 0, 0, &in_data_addr) != 1) {
-            TaskSleep(1);
+        printf("[OpenRE4 Core] ReadAreaData: submitting %s req=%d\n", name, req);
+        fflush(stdout);
+        {
+            int spin = 0;
+            while (Dvd.ReadCheck(req, 0, 0, &in_data_addr) != 1) {
+                spin++;
+                if (spin == 240 || spin == 600) {
+                    printf("[OpenRE4 Core] ReadAreaData: waiting req=%d spin=%d\n", req, spin);
+                    fflush(stdout);
+                    DvdDumpState(req);
+                }
+                if (spin > 1200) {
+                    printf("[OpenRE4 Core] ReadAreaData: req=%d STUCK, giving up wait\n", req);
+                    fflush(stdout);
+                    break;
+                }
+                TaskSleep(1);
+            }
+            printf("[OpenRE4 Core] ReadAreaData: read done after %d spins\n", spin);
+            fflush(stdout);
         }
         readTime = StopwatchStop(NULL);
         StopwatchStart();

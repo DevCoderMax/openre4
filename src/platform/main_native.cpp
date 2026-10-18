@@ -16,6 +16,7 @@
 #include "joy.h"
 
 bool openre4_boot_splash(float dt, bool skip);
+void openre4_menu_layer();
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +25,25 @@ bool openre4_boot_splash(float dt, bool skip);
 #include <math.h>
 #if defined(__linux__) || defined(__APPLE__)
 #include <sys/mman.h>
+#include <execinfo.h>
+#include <signal.h>
+#include <ucontext.h>
+#include <string.h>
+#include <unistd.h>
+
+// Backtrace de crash: imprime o stack (enderecos resolviveis com addr2line -f -e build/openre4).
+static void openre4_fatal_signal(int sig, siginfo_t* si, void* uc_) {
+    void* frames[48];
+    int n = backtrace(frames, 48);
+    ucontext_t* uc = (ucontext_t*) uc_;
+    void* pc = (void*) uc->uc_mcontext.gregs[REG_RIP];
+    fprintf(stderr, "\n[OpenRE4 FATAL] sinal %d @ pc=%p addr=%p — backtrace (%d frames):\n",
+            sig, pc, si ? si->si_addr : 0, n);
+    backtrace_symbols_fd(frames, n, 2);
+    fflush(stderr);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
 #endif
 
 static void openre4_log_callback(AuroraLogLevel level, const char* module, const char* message, unsigned int len) {
@@ -58,6 +78,18 @@ int main(int argc, char* argv[]) {
 #endif
     );
     printf("========================================\n");
+
+#if defined(__linux__) || defined(__APPLE__)
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = openre4_fatal_signal;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, 0);
+    sigaction(SIGBUS, &sa, 0);
+    sigaction(SIGABRT, &sa, 0);
+    sigaction(SIGFPE, &sa, 0);
+    sigaction(SIGILL, &sa, 0);
+#endif
 
     const AuroraConfig config = {
         .appName = "Resident Evil 4 (Native Port)",
@@ -203,20 +235,17 @@ int main(int argc, char* argv[]) {
         bio4_frame();
         frameCount++;
 
-        // Splash de boot por cima do motor (some sozinho ou em qualquer tecla/botao).
-        {
-            uint64_t nowMs = SDL_GetTicks();
-            float dt = (float) (nowMs - lastMs) / 1000.0f;
-            lastMs = nowMs;
-            if (dt > 0.25f) {
-                dt = 0.25f;
-            }
-            bool skip = (Key.trg != 0) || (Joy[0].trg != 0);
-            openre4_boot_splash(dt, skip);
-        }
+        // Interface nativa contínua em Rust (fundo estilizado + botões interativos)
+        openre4_menu_layer();
 
         if (frameCount <= 10 || frameCount % 60 == 0) {
-            printf("[OpenRE4 Core] Rodando a 60 FPS nativo! Frame: %u\n", frameCount);
+            extern int g_openre4_titleRno0;
+            extern int g_openre4_titleRno1;
+            extern int g_openre4_titleCursor;
+            printf("[OpenRE4 Core] 60 FPS nativo! Frame: %u (title rno=%d/%d cursor=%d soft_reset=%d load_game=%d card_acc=%d)\n",
+                   frameCount, g_openre4_titleRno0, g_openre4_titleRno1, g_openre4_titleCursor,
+                   (int) (SysFlagChk(pG, SYS_SOFT_RESET) != 0), (int) (SysFlagChk(pG, SYS_LOAD_GAME) != 0),
+                   (int) (SysFlagChk(pG, SYS_CARD_ACCESS) != 0));
             fflush(stdout);
         }
 

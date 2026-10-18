@@ -15,13 +15,91 @@ Porte nativo de **Resident Evil 4** (build de depuração `G4BE08` do GameCube, 
 | Janela SDL3 + backend Vulkan (Intel Iris Xe / Mesa) | ✅ Abre, 60 FPS, fecha/redimensiona |
 | Montagem do disco original (`G4BE08`) | ✅ `GameID: G4BE` via Aurora DVD |
 | Inicialização (`systemStartInit`, `Title_task`) | ✅ Roda |
-| Sala da Vila `r100` (`--village`) | 🔄 Carregando — `gameRoomInit: Camera completed`, `st1/r100_*.dat` lidos; geometria ainda não renderizada |
+| Vila `r120` → gameplay (`Rno0=3`) | 🔄 `gameRoomInit COMPLETE`; frames avançam e o 3D desenha, mas a câmera do cut (`r120s00`) vai para X≈-119000 → imagem distorcida (ver "Tarefas em andamento") |
+| Transição para `r100` | 🔄 Leitura (`req=27 st1/r100.das`) destravada junto com o fix de fibras; falta validar após a câmera |
 | Teclado/gamepad PC | ✅ Mapeado (tabela abaixo) |
 | Servidor multiplayer em Rust | ❌ Não iniciado (planejado) |
 | Modo Mercenaries co-op | ❌ Não iniciado (planejado) |
 | Windows / macOS / Switch / Android | ❌ Não iniciado (planejado) |
 
 Detalhes da arquitetura e das 5 fases: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+---
+
+## Tarefas em andamento (handoff para agentes)
+
+> Atualizado em out/2026. Fluxo atual: título → START → sala `r120` (Vila) → `gameRoomInit COMPLETE`
+> → `Rno0 = 3` (gameplay ativo). O jogo roda estável (frames avançando, ~2–8 fps sob lavapipe),
+> o filme `movie/opening.sfd` é pulado (sem backend de vídeo) e o 3D desenha — porém a imagem
+> sai distorcida. **Estado de build:** `ninja -C build` limpo.
+
+### Feito nesta fase (não regredir)
+- [x] **Fibras/scheduler**: `TaskSchedulerMain` chamado de dentro da fibra do jogo (SCE tasks,
+      `src/game/sce_sys.cpp:225`) fazia o `FiberYieldBack` devolver `s_currentThread = main`
+      e o `TaskSleep` seguinte era pulado → GameTask rodava solto (~41k fps), main travava e o
+      `Dvd.Watcher()` nunca rodava (stall do `req=27 st1/r100.das`). Correção em
+      `src/platform/dolphin_shims.cpp`: `NativeFiberInfo::resumeThread`, `OSResumeThread` salva
+      resumidor, `FiberYieldBack` restaura, `OSResumeThread(main)` no-op no nativo,
+      `TaskExit`/`TaskChain` usam `OSExitThread`.
+- [x] **`cPartsWk` em `src/game/trans.cpp`**: offsets eram PS2 (0xF4/0xF8); no x64
+      `cParts::pList` = 0x108 e `lt_inv_mat` = 0x110 (`cUnit` = 0x18). Era o crash
+      `C_MTXConcat(b=NULL)` no 1º frame 3D.
+- [x] **Arrays indexados**: o shim 3-arg `GXSetArray` do Aurora registra 256 MB
+      (`vendor/aurora/lib/dolphin/gx/GXGeometry.cpp:237`) → `bad_alloc`/abort no worker GX.
+      Adicionado `GXSetArraySized` (`src/platform/gx_native.cpp`, declarado em `include/gx.h`)
+      e usado em `trans.cpp`, `shadow.cpp`, `mirror.cpp`, `Espgen42/43/45.cpp` com tamanhos
+      reais (`nVtx*stride` / `(W+1)*(H+1)*sizeof(Vec)`).
+- [x] **`MemSignalHeap`** (`src/game/main_mem.cpp`): usava `(u32) heap_backup` (endereço
+      nativo de 64 bits truncado) ao restaurar heap suspenso após o filme → SIGSEGV. Agora
+      `hh[h] = bk[h]`.
+- [x] **Skip do filme**: sem backend, `startApp()==0` → `finishMovie()`; a restauração de heap
+      (`MemDestroyHeap(11)` + `Aram.DmaTransReq` + `MemSignalHeap`) agora funciona.
+      Ver `src/game/sofdec.cpp` (`initSub`, `ThreadMove`, `finishMovie`).
+
+### Tarefa ativa (bloqueio atual): câmera do cut EVD distorcida
+- [ ] **Câmera do cutscene `r120s00` vai para X≈-119000** (a câmera de gameplay fica em
+      ~(-500, 1765, -1190)) → geometria vira "fatias" gigantes na tela.
+      Instrumentação nova (remover depois): `[CUTDBG]`/`[CUTRAW]` em `src/game/cam_motion.cpp`
+      (`CameraMotion::move`), `[CAMDBG]`/`[PROJDBG]` em `src/game/main.cpp` (`bio4_frame`).
+      Já verificado: projeção OK (`ZNEAR=100`, `ZFAR=1e6`, `m22≈-0.0001`, `m23≈-100.01`,
+      fovy do cut 9.71° é plausível); tracks Y/Z plausíveis (~1400, ~-800), só o X explode.
+      Linha do tempo do cut: frame 0 → X≈-118953; frame 120 → X≈-87531.
+      **Próximo passo**: `[CUTRAW]` mostra pos/at crus e a translação de `m_p_base_mat`
+      (`MatCamOya` do packet 9 "cam0000", `src/game/event.cpp:1145`) — decidir se o valor
+      bruto já vem errado (formato/endian dos keys em `src/game/motion.cpp`:
+      `UnpackMotionNative:132`, `HermiteInterpolation`/`Fcc_get_data_*`) ou se é a matriz base
+      que está corrompida (construção em `ExePacket_Pos`: `RotMatrix`/`TransMatrix`).
+- [ ] Depois: validar eventos/câmera do `r120s00`/`r120s01` e a transição para `st1/r100.das`
+      (o stall do `req=27` era consequência do bug de fibras — leitura já completa em 1 spin).
+- [ ] Olhar a cena 3D com a câmera correta (tela preta/distorção restante).
+
+### Limpeza/entrega pendentes
+- [ ] Remover instrumentação temporária: `[FDBG]`, `[CAMDBG]`, `[PROJDBG]` (`main.cpp`),
+      `[CUTDBG]`, `[CUTRAW]` (`cam_motion.cpp`), `[GTASKDBG]` (`game.cpp`), `[ITASKDBG]`
+      (`scheduler.cpp`), `[FIBERDBG]`+ring       (`dolphin_shims.cpp`), prints `[OpenRE4 Debug]` de `calcAddr` (`cam_ctrl.cpp`),
+      `[WDBG]`, `[DMGDBG]`, `[CMDBG]`,
+      `[EVTDBG]`, `[SATDBG]`, prints `ReadAreaData`, `gameRoomInit`, `DvdDumpState`.
+- [ ] Rebuild limpo + commit + push; pedir teste no desktop real do usuário (fora do Xvfb/lavapipe).
+
+### Como reproduzir/testar (Linux, Xvfb)
+```sh
+ninja -C build
+# Xvfb :99 -screen 0 1400x1000x24 &
+ps -eo pid,args | grep "build/openre4" | grep -v grep | awk '{print $1}' | xargs -r kill -9
+setsid bash -c 'DISPLAY=:99 SDL_VIDEODRIVER=x11 \
+  VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
+  stdbuf -oL -eL ./build/openre4 > /tmp/run.log 2>&1; echo "EXIT:$?" > /tmp/run.exit' &
+sleep 32; export DISPLAY=:99
+xdotool mousemove 640 630 mousedown 1 sleep 1 mouseup 1      # START
+sleep 6; xdotool keydown space; sleep 1.2; xdotool keyup space  # titleExit
+sleep 40
+# screenshot (única forma instalada; xwd/import não existem):
+timeout -k 2 10 ffmpeg -loglevel error -f x11grab -video_size 1400x1000 \
+  -i :99 -frames:v 1 -y /tmp/shot.png < /dev/null
+```
+Crash: o handler imprime `[OpenRE4 FATAL] sinal N @ pc=... addr=...` + frames `+0x...`;
+decodificar com `addr2line -f -C -e build/openre4 <offset>`. Cuidado com `ffmpeg` x11grab
+(sempre `timeout`) e com prints em loop (logs de GB).
 
 ---
 

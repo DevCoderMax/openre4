@@ -61,6 +61,7 @@ static void mirrorModelTrans2(cModel* m, cModelInfo* info, Mtx viewMat)
     for (; info != 0; info = info->pList) {
         d = info->model_addr;
         void* texArr = d->pTex;
+        u32 nv = d->nVtx;
         GXClearVtxDesc();
         GXSetVtxDesc(9, 3);
         GXSetVtxDesc(10, 3);
@@ -71,17 +72,17 @@ static void mirrorModelTrans2(cModel* m, cModelInfo* info, Mtx viewMat)
             GXSetVtxAttrFmt(0, 13, 1, 3, 8);
             GXSetVtxDesc(11, 3);
             GXSetVtxAttrFmt(0, 11, 1, 5, 0);
-            GXSetArray(11, clrArr, 4);
+            GXSetArraySized(11, clrArr, nv * 4, 4);
         } else {
             GXSetVtxAttrFmt(0, 13, 1, 2, 15);
         }
-        GXSetArray(9, info->pPosBuf[pG->DblBufIdx], 6);
-        GXSetArray(10, info->pNrmBuf[pG->DblBufIdx], 6);
-        GXSetArray(13, texArr, 4);
+        GXSetArraySized(9, info->pPosBuf[pG->DblBufIdx], nv * 6, 6);
+        GXSetArraySized(10, info->pNrmBuf[pG->DblBufIdx], nv * 6, 6);
+        GXSetArraySized(13, texArr, nv * 4, 4);
         GXSetVtxAttrFmt(0, 9, 1, 3, d->shift);
         if (d->weight_palette_num == 1 && d->weight_ext_num <= 0xFF && !(info->be_flag & 2) && d->nParts == 1) {
-            GXSetArray(9, d->vtxOrig, 8);
-            GXSetArray(10, d->nrmOrig, 8);
+            GXSetArraySized(9, d->vtxOrig, nv * 8, 8);
+            GXSetArraySized(10, d->nrmOrig, nv * 8, 8);
         }
         GXSetCullMode(1);
         GXLoadTexObj(GetTexRenderMgrAddr(0)->GetTexObj(), st->texMap);

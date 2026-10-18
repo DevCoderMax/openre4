@@ -28,3 +28,4 @@ data/
 *.gcm
 *.iso
 *.o
+crates/**/target/

@@ -206,8 +206,7 @@ void MemSignalHeap(int heap_no)
         OSHeapDescriptor* hh = HeapHead;
         OSHeapDescriptor* bk = heap_backup;
 
-        *(OSHeapDescriptor*) (h * sizeof(OSHeapDescriptor) + (u32) hh) =
-            *(OSHeapDescriptor*) (h * sizeof(OSHeapDescriptor) + (u32) bk);
+        hh[h] = bk[h];
         Heap[heap_no].status = 0;
     }
 }
@@ -356,7 +355,9 @@ int MemReplaceHeap(int old_heap, int new_heap)
         return 0;
     }
     if (Heap[old_heap].handle >= 0) {
-        start = (void*)(((uintptr_t)Heap[old_heap].start + 0x20000 + 0x1F) & ~0x1F);
+        // Place the next heap above everything still live in the old one (same rule as the
+        // original: MemCheckHeapEnd), so old-generation pointers stay valid.
+        start = (void*)(uintptr_t) MemCheckHeapEnd(old_heap);
         end = Heap[old_heap].end;
         MemDestroyHeap(old_heap);
     } else {
@@ -472,6 +473,18 @@ void* mem_alloc(u32 size, const char* file, int line, int flag, int heap)
         fflush(stdout);
         pLog->err(0, 0, "alloc[%x]:free[%x] %s", size, OSCheckHeap(Heap[heap].handle), str);
     }
+    {
+        extern void* g_openre4_saveImg;
+        extern unsigned g_openre4_saveImgSize;
+        if (g_openre4_saveImg != 0 && p != NULL) {
+            uintptr_t lo = (uintptr_t) g_openre4_saveImg;
+            uintptr_t hi = lo + g_openre4_saveImgSize;
+            if ((uintptr_t) p < hi && (uintptr_t) p + size > lo) {
+                fprintf(stderr, "[SAVEDBG] ALLOC OVERLAP: p=%p size=%x img=%p..%p heap=%d by %s\n",
+                        (void*) p, size, (void*) lo, (void*) hi, heap, str);
+            }
+        }
+    }
     return p;
 }
 
@@ -500,6 +513,17 @@ void Mem_free_h(void* pAddr, int heap_no)
     }
     if (heap_no == MEM_HEAP_CURRENT) {
         heap_no = CurrentHeap;
+    }
+    {
+        extern void* g_openre4_saveImg;
+        extern unsigned g_openre4_saveImgSize;
+        if (g_openre4_saveImg != 0) {
+            uintptr_t lo = (uintptr_t) g_openre4_saveImg;
+            uintptr_t hi = lo + g_openre4_saveImgSize;
+            if ((uintptr_t) pAddr >= lo && (uintptr_t) pAddr < hi) {
+                fprintf(stderr, "[SAVEDBG] FREE INSIDE IMAGE: p=%p img=%p..%p\n", pAddr, (void*) lo, (void*) hi);
+            }
+        }
     }
     if (memCheckHeapActive(heap_no)) {
         OSFreeToHeap(__OSCurrHeap, pAddr);

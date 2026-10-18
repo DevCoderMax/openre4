@@ -18,7 +18,7 @@ set(SDL_ALSA OFF CACHE BOOL "" FORCE)
 add_subdirectory(vendor/aurora)
 
 add_definitions(-DTARGET_PC=1 -DOPENRE4_NATIVE=1)
-add_compile_options(-fpermissive -Wno-changes-meaning -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast -Wno-narrowing -Wno-register)
+add_compile_options(-g -fpermissive -Wno-changes-meaning -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast -Wno-narrowing -Wno-register)
 
 file(GLOB GAME_SOURCES src/game/*.cpp)
 file(GLOB ST1_SOURCES src/st1/*.cpp)
@@ -37,6 +37,8 @@ set(EM_SOURCES
     src/platform/em_native.cpp
     src/em10/em10.cpp
     src/em12/em12_set.cpp
+    src/em15/em15_set.cpp
+    src/em26/em26.cpp
 )
 
 # Splash de boot: converte assets/boot.png em RGBA cru no momento do build.
@@ -57,7 +59,9 @@ endif ()
 add_executable(openre4
     src/platform/main_native.cpp
     src/platform/boot_splash.cpp
+    src/platform/menu_native.cpp
     src/platform/dolphin_shims.cpp
+    src/platform/gx_native.cpp
     ${GAME_SOURCES}
     ${ST1_SOURCES}
     ${ST_SOURCES}
@@ -76,6 +80,8 @@ target_include_directories(openre4 PRIVATE
     src/wep02
     src/em10
     src/em12
+    src/em15
+    src/em26
 )
 
 target_link_libraries(openre4 PRIVATE
@@ -89,6 +95,28 @@ target_link_libraries(openre4 PRIVATE
     aurora::card
     aurora::thp
     aurora::os
+    ${CMAKE_SOURCE_DIR}/crates/openre4_ui/target/release/libopenre4_ui.so
+    dl
+    pthread
+)
+
+# Módulo de UI em Rust (crates/openre4_ui)
+find_program(CARGO_EXECUTABLE cargo REQUIRED)
+set(OPENRE4_UI_LIB ${CMAKE_SOURCE_DIR}/crates/openre4_ui/target/release/libopenre4_ui.so)
+add_custom_command(
+    OUTPUT ${OPENRE4_UI_LIB}
+    COMMAND ${CARGO_EXECUTABLE} build --release --manifest-path ${CMAKE_SOURCE_DIR}/crates/openre4_ui/Cargo.toml
+    DEPENDS ${CMAKE_SOURCE_DIR}/crates/openre4_ui/src/lib.rs ${CMAKE_SOURCE_DIR}/crates/openre4_ui/Cargo.toml
+    COMMENT "Compilando crate openre4_ui em Rust"
+)
+add_custom_target(openre4_ui_target ALL
+    DEPENDS ${OPENRE4_UI_LIB}
+)
+add_dependencies(openre4 openre4_ui_target)
+
+set_target_properties(openre4 PROPERTIES
+    BUILD_RPATH "${CMAKE_SOURCE_DIR}/crates/openre4_ui/target/release"
+    INSTALL_RPATH "${CMAKE_SOURCE_DIR}/crates/openre4_ui/target/release"
 )
 
 message(STATUS "OpenRE4 configurado com sucesso para compilação nativa.")

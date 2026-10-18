@@ -123,6 +123,14 @@ void TaskSchedulerMain(TASK* pT)
         pT->Status = TASK_RUN;
         OSWakeupThread(&pT->Queue);
         GXSetCurrentGXThread();
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        // Fiber emulation: resume in the same pass. TaskSleep saves the fiber context inside
+        // OSSleepThread, so one swap in / swap out per cycle keeps TaskSleep(1) at one call per
+        // frame (60 Hz); deferring the resume to the next pass made every sleeping task run at
+        // 1/3 speed, which lost short button-press edges and made everything sluggish.
+        OSResumeThread(&pT->Thread);
+        GXSetCurrentGXThread();
+#endif
         break;
     case TASK_RUN:
         OSResumeThread(&pT->Thread);
@@ -235,6 +243,17 @@ void TaskSleep(int ctr)
     }
     pCTask->SleepCtr = ctr;
     pCTask->Status = (pCTask->Status & TASK_SUSPEND) | TASK_SLEEP;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // Fiber emulation: the original code first swaps to the parent thread (OSResumeThread) and
+    // then parks the task in OSSleepThread, which costs two extra resumes before the task body
+    // runs again. Sleeping straight into the main context saves exactly one context here — the
+    // TASK_SLEEP case in TaskSchedulerMain resumes it the very next frame.
+    if (pCTask->Priority > 0xF) {
+        OSSignalSemaphore(&Sema);
+    }
+    OSSleepThread(&pCTask->Queue);
+    GXSetCurrentGXThread();
+#else
     if (pParentThread != NULL) {
         OSResumeThread(pParentThread);
     }
@@ -246,6 +265,7 @@ void TaskSleep(int ctr)
         OSSuspendThread(pParentThread);
     }
     GXSetCurrentGXThread();
+#endif
 }
 
 // Called from a task: replaces itself with `func(arg)` in the same slot (started next frame) and
@@ -260,6 +280,10 @@ void TaskChain(TaskFunc func, void* arg)
 #endif
     pCTask->Status = TASK_EXEC;
     pCTask->arg = arg;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // Fiber: hand control straight back to whoever resumed us; the chained task starts next pass.
+    OSExitThread(&pCTask->Thread);
+#else
     if (pParentThread != NULL) {
         OSResumeThread(pParentThread);
     }
@@ -267,6 +291,7 @@ void TaskChain(TaskFunc func, void* arg)
         OSSignalSemaphore(&Sema);
     }
     OSExitThread(&pCTask->Thread);
+#endif
 }
 
 // Called from a task: frees the slot and ends the thread (the scheduler thread resumes).
@@ -276,6 +301,10 @@ void TaskExit()
 
     t->Status = TASK_NONE;
     t->suspend_cnt = 0;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // Fiber: return straight to the resumer's frame (TaskSchedulerMain / iTaskScheduler).
+    OSExitThread(&pCTask->Thread);
+#else
     if (pParentThread != NULL) {
         OSResumeThread(pParentThread);
     }
@@ -283,6 +312,7 @@ void TaskExit()
         OSSignalSemaphore(&Sema);
     }
     OSExitThread(&pCTask->Thread);
+#endif
 }
 
 // Kills the task in slot `prio`.
@@ -381,6 +411,8 @@ TASK* iTaskExec(TaskFunc func)
     TASK* t;
     int flg = iTask_exec_flg;
 
+    printf("[ITASKDBG] iTaskExec flg=%d func=%p\n", flg, (void*) func);
+    fflush(stdout);
     if (flg == 0) {
         iTask_exec_flg = 1;
         t = TaskExec(TASK_ISR, func, 0);
@@ -393,6 +425,8 @@ TASK* iTaskExec(TaskFunc func)
 // Kills the ISR task.
 void iTaskKill()
 {
+    printf("[ITASKDBG] iTaskKill\n");
+    fflush(stdout);
     iTask_exec_flg = 0;
     TaskKill(&Task[TASK_ISR]);
 }
@@ -400,6 +434,8 @@ void iTaskKill()
 // Called from the ISR task: ends it.
 void iTaskExit()
 {
+    printf("[ITASKDBG] iTaskExit\n");
+    fflush(stdout);
     iTask_exec_flg = 0;
     TaskExit();
 }

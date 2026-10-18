@@ -8885,12 +8885,14 @@ static void em10_R1_Catapult(cEm10* em)
 
     w->Be_flg |= 0x8000;
     switch (em->r_no_2) {
-    case 0:
-        n = *(u16*) PL_ARC_PTR(em->subArc, 5) & 0x3FFF;
-        r = Rnd() % n;
-        MotionSetCore(em, &em->Motion, PL_ARC_PTR(em->subArc, 5), 0, 10, 5, (u16) r);
+    case 0: {
+        void* arc5 = PL_ARC_PTR(em->subArc, 5);
+        n = arc5 ? (*(u16*) arc5 & 0x3FFF) : 0;
+        r = (n > 0) ? (Rnd() % n) : 0;
+        MotionSetCore(em, &em->Motion, arc5, 0, 10, 5, (u16) r);
         em->hp = 1;
         em->r_no_2++;
+    }
     case 1:
         w->Be_flg |= 0x40000;
         MotionMove(em, 0);
@@ -22459,9 +22461,9 @@ void em10SetWaitMotion(cEm10* em, int a)
     if (em->type == 2) {
         mot = PL_ARC_PTR(em->subArc, 0x18F);
     }
-    n = ((MotionData*) mot)->maxFrame & 0x3FFF;
-    r = Rnd();
-    MotionSetCore(em, &em->Motion, mot, 0, (u8) a, flag, (u16) (r % n));
+    n = mot ? (((MotionData*) mot)->maxFrame & 0x3FFF) : 0;
+    r = (n > 0) ? (Rnd() % n) : 0;
+    MotionSetCore(em, &em->Motion, mot, 0, (u8) a, flag, (u16) r);
 }
 
 // Walk motion by weapon kind and set-number variant (5 walk styles, water / event overrides).

@@ -11,6 +11,7 @@
 #include "main.h"
 #include "gx.h"
 #include <string.h>
+#include <stdio.h>
 #include <dolphin/base/PPCArch.h>
 
 #line 30 "D:/Bio4/Prog/atari.cpp"
@@ -662,17 +663,23 @@ void cEatMgr::log(const char* pStr, ...)
 // at pos / rot; NULL when the pool is full.
 cSat* cSatMgr::create(void* data, int flag, Vec* pos, Vec* rot, u8 type)
 {
+    fprintf(stderr, "[SATDBG] create5 data=%p flag=%x type=%u\n", data, flag, type);
     cSat* sat = cManager<cSat>::create();
+    fprintf(stderr, "[SATDBG] create5 pool sat=%p\n", sat);
     cSatHeader* hdr = (cSatHeader*) data;
 
     if (!VALID_PTR(sat)) {
         return 0;
     }
     sat->x5C = 0;
+    fprintf(stderr, "[SATDBG] create5 x5C ok ver=%x\n", (unsigned) hdr->m_Version);
     if (hdr->m_Version != 0xFF && (hdr->m_Version & 0x80)) {
         data = hdr->getSat(type);
+        fprintf(stderr, "[SATDBG] create5 getSat data=%p\n", data);
     }
+    fprintf(stderr, "[SATDBG] create5 ->init(%p) sat->vt=%p\n", data, (void*) *(void**) sat);
     sat->init((cSatFile*) data, pos ? pos : (Vec*) &vecZero, rot ? rot : (Vec*) &vecZero);
+    fprintf(stderr, "[SATDBG] create5 init ok\n");
     return sat;
 }
 
@@ -684,6 +691,7 @@ cSat* cSatMgr::create(Vec* pPos, Vec* pAng, Vec* pVec, f32 height, u32 attr, u32
     cSatFile* f;
     cSat* sat;
 
+    fprintf(stderr, "[SATDBG] create6 flag=%x attr=%x h=%f pVec=%p\n", flag, attr, height, pVec);
     if (flag & 0x200) {
         f = createFloorSat(pVec, height, attr);
     } else if (flag & 0x100) {
@@ -691,6 +699,7 @@ cSat* cSatMgr::create(Vec* pPos, Vec* pAng, Vec* pVec, f32 height, u32 attr, u32
     } else {
         f = createSat(pVec, height, attr);
     }
+    fprintf(stderr, "[SATDBG] create6 branch done f=%p\n", f);
     if (f == 0) {
         return 0;
     }
@@ -1086,16 +1095,22 @@ void cSat::init(cSatFile* pSf, Vec* pos, Vec* ang)
         return;
     }
 #if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    fprintf(stderr, "[SATDBG] init: convertEndian...\n");
     pSf->convertEndian();
 #endif
+    fprintf(stderr, "[SATDBG] init: dataCheck...\n");
     if (!pSf->dataCheck()) {
         pLog->err(0, 0, "ATARI DATA ERROR 0x%08x", pSf);
     }
     m_Flag.reset();
     m_Flag.set(FLAG_ENABLE);
+    fprintf(stderr, "[SATDBG] init: assign...\n");
     *this = pSf;
+    fprintf(stderr, "[SATDBG] init: coords...\n");
     setCoord(pos, ang);
+    fprintf(stderr, "[SATDBG] init: blockInit(%p) nv=%u np=%u nb=%u...\n", block_p, vertex_num, polygon_num, bb_num);
     blockInit(block_p);
+    fprintf(stderr, "[SATDBG] init: done\n");
 }
 
 // Places the piece: mat from rot / pos and its inverse for world -> local queries.
@@ -1239,14 +1254,13 @@ int cSatFile::dataCheck()
 // Endian conversion for SAT files
 void cSatFile::convertEndian()
 {
-    if (x1 & 1) {
+    fprintf(stderr, "[SATDBG] convEndian x1=%02x ver=%02x nV=%u nN=%u nE=%u nP=%u nB=%u\n",
+            x1, m_Version, m_nVertex, m_nNormal, m_nEdge, m_nPolygon, m_nBlock);
+    if (x1 == 0x55) {
+        fprintf(stderr, "[SATDBG] convEndian: skip (marker)\n");
         return;
     }
-    // Check if endian conversion is needed
-    if (m_nPolygon <= 0x1FFF && m_nBlock <= 0x1FFF && m_nVertex <= 0x3FFF) {
-        x1 |= 1;
-        return;
-    }
+    fprintf(stderr, "[SATDBG] convEndian: SWAPPING\n");
 
     m_nVertex = __builtin_bswap16(m_nVertex);
     m_nNormal = __builtin_bswap16(m_nNormal);
@@ -1304,7 +1318,7 @@ void cSatFile::convertEndian()
     int blockCount = 0;
     convertBlockEndian(root, blockCount, m_nBlock);
 
-    x1 |= 1;
+    x1 = 0x55;
 }
 
 void cSatFile::convertBlockEndian(cSatBlock* pBlock, int& count, int maxBlocks)
@@ -1488,6 +1502,7 @@ static cSatFile* createFloorSat2(cSat* sat, Vec* v, u32 attr, f32 h)
 // Wall piece over the 4-corner polygon v (closed side box of height h, no top/bottom).
 cSatFile* createSat(Vec* v, f32 h, u32 attr)
 {
+    fprintf(stderr, "[SATDBG] satOpen v=%p h=%f attr=%x\n", v, h, attr);
     static const SAT_POLY poly0[8] = {
         { { 5, 2, 1 }, 0, { 0, 1, 2 } },
         { { 2, 5, 6 }, 0, { 3, 4, 5 } },
@@ -1514,6 +1529,7 @@ cSatFile* createSat(Vec* v, f32 h, u32 attr)
         return 0;
     }
     f->m_Version = 0xFF;
+    f->x1 = 0x55;
     f->m_nVertex = 8;
     f->m_nNormal = 4;
     f->m_nEdge = 24;
@@ -1627,6 +1643,7 @@ cSatFile* createBoxSat(Vec* v, f32 h, u32 attr)
     const SAT_POLY* p;
     u32 i;
 
+    fprintf(stderr, "[SATDBG] boxSat v=%p h=%f attr=%x\n", v, h, attr);
 #line 2757 "D:/Bio4/Prog/atari.cpp"
     f = (cSatFile*) MEM_ALLOC(0x398, 1, 13);
     if (!VALID_PTR(f)) {
@@ -1634,6 +1651,7 @@ cSatFile* createBoxSat(Vec* v, f32 h, u32 attr)
         return 0;
     }
     f->m_Version = 0xFF;
+    f->x1 = 0x55;
     f->m_nVertex = 8;
     f->m_nNormal = 6;
     f->m_nEdge = 36;
@@ -1724,6 +1742,7 @@ cSatFile* createBoxSat(Vec* v, f32 h, u32 attr)
 // Floor piece: the 4-corner polygon v as two triangles.
 static cSatFile* createFloorSat(Vec* v, f32 h, u32 attr)
 {
+    fprintf(stderr, "[SATDBG] floorSat v=%p h=%f attr=%x\n", v, h, attr);
     static const SAT_POLY poly0[2] = {
         { { 0, 2, 1 }, 0, { 0, 1, 2 } },
         { { 2, 0, 3 }, 0, { 3, 4, 5 } },
@@ -1744,6 +1763,7 @@ static cSatFile* createFloorSat(Vec* v, f32 h, u32 attr)
         return 0;
     }
     f->m_Version = 0xFF;
+    f->x1 = 0x55;
     f->m_nVertex = 4;
     f->m_nNormal = 1;
     f->m_nEdge = 6;

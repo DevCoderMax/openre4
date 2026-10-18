@@ -1790,25 +1790,45 @@ struct SndDoorSe {
 int SndDoorSeLoad()
 {
     u32 i;
-    u16 cnt = *(u16*) ((u8*) SndMem.door_tbl + SndMem.door_tbl->num_ofs);
+    u16 cnt;
     u32 no = 0xFFFF;
     int ret = -1;
     SndDoorSe* d;
+    u32 num;
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    cnt = __builtin_bswap16(*(u16*) ((u8*) SndMem.door_tbl + __builtin_bswap32(SndMem.door_tbl->num_ofs)));
+#else
+    cnt = *(u16*) ((u8*) SndMem.door_tbl + SndMem.door_tbl->num_ofs);
+#endif
     d = (SndDoorSe*) GetDataExt(pG->pRoom, "DSE", 0);
     SND_BIT_CLR(pSnd->blk_flag, 7);
     memclr_asm(callErr[7], sizeof(callErr[7]));
-    if (d != NULL && d->num != 0) {
-        for (i = 0; i < d->num; i++) {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    num = d != NULL ? __builtin_bswap32(d->num) : 0;
+#else
+    num = d != NULL ? d->num : 0;
+#endif
+    if (num != 0) {
+        for (i = 0; i < num; i++) {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+            if (__builtin_bswap16(d->e[i].room) == pG->RoomNo_next) {
+                no = __builtin_bswap16(d->e[i].door[pG->door_se]);
+#else
             if (d->e[i].room == pG->RoomNo_next) {
                 no = d->e[i].door[pG->door_se];
+#endif
                 pG->door_se = 0;
                 break;
             }
         }
         if (no < cnt && no != pSnd->doorse_id) {
 #line 2389 SND_FILE
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+            ret = DvdRead(0x69, 0, 0, __builtin_bswap32(((u32*) ((u8*) SndMem.door_tbl + __builtin_bswap32(SndMem.door_tbl->file_ofs)))[no]), 0, 0x8000, __FILE__, __LINE__);
+#else
             ret = DvdRead(0x69, 0, 0, ((u32*) ((u8*) SndMem.door_tbl + SndMem.door_tbl->file_ofs))[no], 0, 0x8000, __FILE__, __LINE__);
+#endif
             pSnd->doorse_id = no;
         } else if (no != 0xFFFF) {
             SND_BIT_SET(pSnd->blk_flag, 7);

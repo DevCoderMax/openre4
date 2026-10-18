@@ -19,6 +19,13 @@
 #include <string.h>
 #include <math.h>
 #include "math_sub_decl.h"
+#include "openre4_ui.h"
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_scancode.h>
+#include <imgui.h>
+#endif
 
 int ProjType = 1;
 
@@ -67,6 +74,54 @@ void CameraRoomInit()
     CamDbg.m_move_gain = 1.0f;
 }
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#include "sce_at.h"
+
+extern "C" void openre4_warp_to_room(unsigned short room)
+{
+    Vec pos = {0.0f, 0.0f, 0.0f};
+    Vec rot = {0.0f, 0.0f, 0.0f};
+    if (room == 0x100) {
+        // Floresta / Entrada da primeira casa do Ganado
+        pos.x = -109483.0f;
+        pos.y = -618.0f;
+        pos.z = 916.0f;
+        rot.y = 2.0f;
+    } else if (room == 0x101) {
+        // Vila Central (Pueblo) - Entrada da praça com as casas e fogueira
+        pos.x = -51510.0f;
+        pos.y = 165.0f;
+        pos.z = 21834.0f;
+        rot.y = 2.3f;
+    } else if (room == 0x120) {
+        // Estrada montanhosa da introdução
+        pos.x = 0.0f;
+        pos.y = 0.0f;
+        pos.z = 0.0f;
+    }
+    printf("[OpenRE4 Warp] Teleportando para sala 0x%X (pos: %.1f, %.1f, %.1f, ang: %.1f)...\n", room, pos.x, pos.y, pos.z, rot.y);
+    fflush(stdout);
+
+    // Configura os parâmetros de salto de sala do motor do jogo
+    pG->NextPos = pos;
+    pG->NextY = rot.y;
+    pG->room_id_prev = pG->room_id;
+    pG->Part_old = pG->Part;
+    pG->Stage_next = room >> 8;
+    pG->Room_next = room & 0xFF;
+    pG->RoomNo_next = room;
+    pG->Part_next = 0;
+
+    DbgFlagOn(pG, DBG_ROOMJMP);
+    SysFlagOff(pG, SYS_START_EVT_SKIP);
+    pG->Stop_flg = 0;
+    pG->Rno0 = 4;
+    pG->Rno1 = 0;
+    pG->Rno2 = 0;
+    pG->Rno3 = 0;
+}
+#endif
+
 // Per-frame camera update from the game loop: copies the controller's camera into pG->Camera
 // unless the debug camera overrides it, then builds the projection and view. A fovy of 0 is an
 // error and is replaced by 50.
@@ -89,6 +144,77 @@ void CameraMove()
         }
     }
     CamDbg.move(cam, &Joy[1], 0);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    {
+        OpenRE4CameraInput input = {};
+        input.dt = ImGui::GetIO().DeltaTime;
+        if (input.dt <= 0.0f || input.dt > 0.2f) {
+            input.dt = 1.0f / 60.0f;
+        }
+
+        // Atalhos de teletransporte de sala / estágio
+        if (ImGui::IsKeyPressed(ImGuiKey_F4)) openre4_warp_to_room(0x120);
+        if (ImGui::IsKeyPressed(ImGuiKey_F5)) openre4_warp_to_room(0x100);
+        if (ImGui::IsKeyPressed(ImGuiKey_F6)) openre4_warp_to_room(0x101);
+
+        if (ImGui::IsKeyPressed(ImGuiKey_F3)) {
+            input.toggle_freecam = 1;
+        }
+
+        if (openre4_camera_is_freecam_active()) {
+            if (ImGui::IsKeyDown(ImGuiKey_W)) input.move_forward += 1.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_S)) input.move_forward -= 1.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_D)) input.move_right += 1.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_A)) input.move_right -= 1.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_Space)) input.move_up += 1.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_C)) input.move_up -= 1.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_LeftShift) || ImGui::IsKeyDown(ImGuiKey_RightShift)) input.boost = 1;
+
+            // Teclas de seta para girar a câmera (caso não use mouse)
+            if (ImGui::IsKeyDown(ImGuiKey_LeftArrow)) input.mouse_dx -= 25.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_RightArrow)) input.mouse_dx += 25.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_UpArrow)) input.mouse_dy -= 20.0f;
+            if (ImGui::IsKeyDown(ImGuiKey_DownArrow)) input.mouse_dy += 20.0f;
+
+            // Mouse look
+            ImVec2 mdelta = ImGui::GetIO().MouseDelta;
+            input.mouse_dx += mdelta.x;
+            input.mouse_dy += mdelta.y;
+
+            // Zoom com scroll do mouse ou teclas [-] e [+]
+            input.fov_delta = ImGui::GetIO().MouseWheel;
+            if (ImGui::IsKeyDown(ImGuiKey_LeftBracket) || ImGui::IsKeyDown(ImGuiKey_Minus)) input.fov_delta -= 0.5f;
+            if (ImGui::IsKeyDown(ImGuiKey_RightBracket) || ImGui::IsKeyDown(ImGuiKey_Equal)) input.fov_delta += 0.5f;
+
+            // Presets de teletransporte (1 = Centro da Vila, 2 = Vista Aérea, 3 = Estrada, 4 = 1ª Casa)
+            if (ImGui::IsKeyPressed(ImGuiKey_1) || ImGui::IsKeyPressed(ImGuiKey_Keypad1)) input.teleport_preset = 1;
+            if (ImGui::IsKeyPressed(ImGuiKey_2) || ImGui::IsKeyPressed(ImGuiKey_Keypad2)) input.teleport_preset = 2;
+            if (ImGui::IsKeyPressed(ImGuiKey_3) || ImGui::IsKeyPressed(ImGuiKey_Keypad3)) input.teleport_preset = 3;
+            if (ImGui::IsKeyPressed(ImGuiKey_4) || ImGui::IsKeyPressed(ImGuiKey_Keypad4)) input.teleport_preset = 4;
+
+            // Analógicos do controle
+            if (Joy[0].stickX != 0 || Joy[0].stickY != 0) {
+                input.move_right += (float) Joy[0].stickX / 80.0f;
+                input.move_forward += (float) Joy[0].stickY / 80.0f;
+            }
+            if (Joy[0].substickX != 0 || Joy[0].substickY != 0) {
+                input.mouse_dx += (float) Joy[0].substickX * 0.5f;
+                input.mouse_dy += (float) Joy[0].substickY * 0.5f;
+            }
+        }
+
+        openre4_camera_update(
+            &cam->param.Campos.x,
+            &cam->param.Target.x,
+            &cam->Up.x,
+            &cam->param.Fovy,
+            &input
+        );
+        if (openre4_camera_is_freecam_active()) {
+            CameraSetOrientationUp(cam);
+        }
+    }
+#endif
     if (cam->param.Fovy == 0.0f) {
         pLog->err(0, 0, "CameraMove(): Fovy = 0.0f");
         cam->param.Fovy = 50.0f;

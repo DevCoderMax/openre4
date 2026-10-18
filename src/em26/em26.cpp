@@ -39,6 +39,7 @@ static void em26_R0_Die(cEm26* em);
 static void em26_R1_Die_Normal(cEm26* em);
 
 
+#if !defined(OPENRE4_NATIVE)
 // Module entry (SN loader): registers Em26Init as the DOL's enemy constructor (EmInitFunc).
 extern "C" void _prolog()
 {
@@ -55,6 +56,7 @@ extern "C" void _epilog()
 extern "C" void _unresolved()
 {
 }
+#endif
 
 // EmInitFunc of the module: constructs the cEm26 class in the manager's work.
 void Em26Init(cEm* em)

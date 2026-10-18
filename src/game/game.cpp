@@ -226,6 +226,14 @@ void GameTask()
     pG->Rno3 = 0;
     for (;;) {
 #if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+        {
+            static u32 it = 0;
+            it++;
+            if ((it % 60) == 0) {
+                printf("[GTASKDBG] it=%u frame=%u rno0=%d\n", it, pG->Frame_cnt, pG->Rno0);
+                fflush(stdout);
+            }
+        }
         static int last_rno0 = -1;
         if (pG->Rno0 != last_rno0) {
             printf("[OpenRE4 Core] GameTask state transition: Rno0 = %d\n", pG->Rno0);
@@ -364,9 +372,25 @@ void gameRoomInit()
     int n;
     void* p;
 
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[OpenRE4 Core] gameRoomInit: ENTER\n");
+    fflush(stdout);
+#endif
     DC.setNBlkStop(1);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[OpenRE4 Core] gameRoomInit: setNBlkStop done\n");
+    fflush(stdout);
+#endif
     SndReadAddrInit();
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[OpenRE4 Core] gameRoomInit: SndReadAddrInit done\n");
+    fflush(stdout);
+#endif
     gameRoomMemInit();
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[OpenRE4 Core] gameRoomInit: gameRoomMemInit done\n");
+    fflush(stdout);
+#endif
     if (pG->shooting_mode != 0) {
         pG->debug_mode = 0;
         DbgFlagOn(pG, DBG_LOG_OFF);
@@ -378,7 +402,15 @@ void gameRoomInit()
     }
     DbgFlagOn(pG, DBG_WIND_ON);
     ReadPlayerData(pG->pl_type, pG->pl_costume);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[OpenRE4 Core] gameRoomInit: ReadPlayerData done\n");
+    fflush(stdout);
+#endif
     ReadAreaData();
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[OpenRE4 Core] gameRoomInit: ReadAreaData done\n");
+    fflush(stdout);
+#endif
     DC.initDataUnit();
     ActBtn.init();
     ConsInitRoom((ConsRoom*) GetDataExt(pG->pRoom, "CNS", 0));
@@ -425,6 +457,8 @@ void gameRoomInit()
     ShadowRoomInit();
     DmgMgr.roomInit();
     DmgMgr.arrayAlloc(20);
+    printf("[DMGDBG] after alloc: pArray=%p nArray=%u size=%u\n", (void*) DmgMgr.pArray, DmgMgr.nArray, DmgMgr.size);
+    fflush(stdout);
     fadeSetG(2, 0, 0, 0);
     FilterRoomInit();
     TexRenderMgrRoomInit();
@@ -686,6 +720,14 @@ void gameMainLoop()
             LightMgr.move();
         }
         ProcessTickGet(5, "LightMove");
+        {
+            static int dbgN = 0;
+            if (dbgN < 6) {
+                printf("[DMGDBG] frame %d move: pArray=%p nArray=%u size=%u\n", dbgN, (void*) DmgMgr.pArray, DmgMgr.nArray, DmgMgr.size);
+                fflush(stdout);
+            }
+            dbgN++;
+        }
         DmgMgr.move();
         SatMgr.dieCheck();
         EatMgr.dieCheck();
@@ -899,6 +941,9 @@ bool cGameSave::load(SAVE_DATA_HEAD* head)
 // SaveKind = mode, global block, room flags, sub screen, merchant, items).
 bool cGameSave::save(SAVE_DATA_HEAD* data, int mode)
 {
+    fprintf(stderr, "[SAVEDBG] save data=%p\n", (void*) data);
+    fprintf(stderr, "[SAVEDBG] save base=%p pGlobal=%p pRm=%p pSs=%p pMr=%p pItm=%p size=%u\n",
+            (void*) data->base, (void*) data->pGlobal, data->pRm, (void*) data->pSs, data->pMr, data->pItm, data->size);
     if (data->base == 0) {
         return 0;
     }
@@ -1007,8 +1052,16 @@ SAVE_DATA_HEAD* cGameSave::alloc()
     d->size = size;
     d->base = 0;
     calcAddr(d);
+    extern void* g_openre4_saveImg;
+    extern unsigned g_openre4_saveImgSize;
+    g_openre4_saveImg = d;
+    g_openre4_saveImgSize = size;
+    fprintf(stderr, "[SAVEDBG] alloc image %p..%p size=%u\n", (void*) d, (void*) ((u8*) d + size), size);
     return d;
 }
+
+void* g_openre4_saveImg = 0;
+unsigned g_openre4_saveImgSize = 0;
 
 // Rno0 == 5: the ending screen: loads Etc/Ending.tpl, fades in and shows it until START, then
 // requests the soft reset (System_flg 0x4000000).

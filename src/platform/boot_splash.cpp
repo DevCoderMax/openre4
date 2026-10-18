@@ -64,6 +64,21 @@ void boot_try_load()
 
 } // namespace
 
+// Textura do boot para reuso (menu nativo). Carrega sob demanda; 0 se indisponivel.
+ImTextureID openre4_boot_texture(int* w, int* h)
+{
+    if (!g_bootTried) {
+        boot_try_load();
+    }
+    if (w) {
+        *w = g_bootW;
+    }
+    if (h) {
+        *h = g_bootH;
+    }
+    return g_bootTex;
+}
+
 // Desenha o splash. Retorna false quando acabou (some) e o jogo segue normal.
 // dt: segundos desde o frame anterior. skip: true quando o jogador apertou algo.
 bool openre4_boot_splash(float dt, bool skip)

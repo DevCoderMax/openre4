@@ -169,6 +169,19 @@ RESTART:
 
 void bio4_frame()
 {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if ((pG->Frame_cnt % 120) == 0) {
+        CAMERA* c = &pG->Camera;
+        if (c != 0) {
+            printf("[CAMDBG] f=%u pos=(%.2f,%.2f,%.2f) at=(%.2f,%.2f,%.2f) fovy=%.2f dist=%.2f\n",
+                   pG->Frame_cnt, c->param.Campos.x, c->param.Campos.y, c->param.Campos.z,
+                   c->param.Target.x, c->param.Target.y, c->param.Target.z, c->param.Fovy, c->Distance);
+            printf("[PROJDBG] m00=%.3f m11=%.3f m22=%.3f m23=%.3f m32=%.3f\n",
+                   c->ProjMat[0][0], c->ProjMat[1][1], c->ProjMat[2][2], c->ProjMat[2][3], c->ProjMat[3][2]);
+            fflush(stdout);
+        }
+    }
+#endif
     StopwatchInit();
     ProcessTickInit();
     Render_before();
@@ -191,6 +204,9 @@ void bio4_frame()
     if (!SysFlagChk(pG, SYS_TRANS_STOP)) {
         Trans();
     }
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[FDBG] f=%u A\n", pG->Frame_cnt); fflush(stdout);
+#endif
     Dvd.Watcher();
     SndWatcher();
     ProcessTickGet(5, "SndWatcher");
@@ -208,6 +224,9 @@ void bio4_frame()
     }
     EprintfFlush();
     ProcessTickGet(2, "PROCESS CPU");
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[FDBG] f=%u B\n", pG->Frame_cnt); fflush(stdout);
+#endif
     iTaskScheduler();
     Render_done();
     Block.checkCommand();
@@ -216,6 +235,9 @@ void bio4_frame()
     ProcessTickGet(3, "DRAW REMAIN");
 #ifndef OPENRE4_NATIVE
     while (vsync_cnt < GetSystemVcnt() - 1) {}
+#endif
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[FDBG] f=%u C\n", pG->Frame_cnt); fflush(stdout);
 #endif
     Render_swap();
     PPCSync();
@@ -226,6 +248,9 @@ void bio4_frame()
     systemVSyncPost();
     SysFlagOff(pG, SYS_RENDER_END);
     ProcessTickGet(0, "PROCESS TOTAL");
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    printf("[FDBG] f=%u D\n", pG->Frame_cnt); fflush(stdout);
+#endif
 }
 
 // Hook after the vsync wait; empty.

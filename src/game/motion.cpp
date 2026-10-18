@@ -1041,6 +1041,15 @@ void MotionGetSpeed(cModel* pEm, MOTION_INFO* w, int flg, Vec* Pos_move, Vec* An
     Mtx rm;
     int flip;
 
+    if (w->pMot == 0) {
+        Pos_move->x = 0.0f;
+        Pos_move->y = 0.0f;
+        Pos_move->z = 0.0f;
+        Ang_move->x = 0.0f;
+        Ang_move->y = 0.0f;
+        Ang_move->z = 0.0f;
+        return;
+    }
     w->Mot_frame = SEQ_FRAME(w->Seq.Frame);
     pp->Attr = 0;
     w->Ang_old = w->Ang;

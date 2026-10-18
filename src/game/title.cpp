@@ -31,6 +31,7 @@
 #include "pl_sub.h"
 #include "eprintf.h"
 #include "title.h"
+#include "openre4_ui.h"
 #include <string.h>
 #include <dolphin/os.h>
 
@@ -85,6 +86,15 @@ int TTL_CANCEL_CAPCOM = 120;
 int TTL_CANCEL_CRI = 245;
 static int TTL_CANCEL_DOLBY = 345;
 bool g_autoStartVillage = false;
+bool g_openre4_startVillageR120 = false;
+
+#ifdef OPENRE4_NATIVE
+// Estado do menu publicado para a camada nativa (src/platform/menu_native.cpp).
+int g_openre4_titleRno0 = -1;
+int g_openre4_titleRno1 = -1;
+int g_openre4_titleCursor = -1;
+int g_openre4_titleMenuNum = 0;
+#endif
 
 // The title screen task (scheduler slot after boot): allocates the save buffer, item manager, the
 // core / option data, then runs the title state machine (TITLE_WORK Rno0) every frame until
@@ -104,6 +114,13 @@ void Title_task()
     w = (TITLE_WORK*) MEM_CALLOC(sizeof(TITLE_WORK), 1, 13);
     for (;;) {
         titleFuncTbl[w->Rno0](w);
+#ifdef OPENRE4_NATIVE
+        // Estado publicado para o menu nativo (menu_native.cpp).
+        g_openre4_titleRno0 = w->Rno0;
+        g_openre4_titleRno1 = w->Rno1;
+        g_openre4_titleCursor = w->cursor;
+        g_openre4_titleMenuNum = w->menu_num;
+#endif
         TaskSleep(1);
     }
 }
@@ -128,6 +145,12 @@ void titleInit(TITLE_WORK* w)
     w->scroll_add = 1.5f;
     StaFlagOn(pG, STA_TITLE);
     IdAllocBuffer();
+#ifdef OPENRE4_NATIVE
+    // Desliga sprites 2D legados do GameCube para eliminar qualquer vazamento/piscada visual
+    IdSys.dispSw(IDC_TITLE, 0);
+    IdSys.dispSw(IDC_TITLE_MENU, 0);
+    openre4_ui_init();
+#endif
 }
 
 // Shows the title logo / background id layout (the alternate one once everything is unlocked,
@@ -135,6 +158,10 @@ void titleInit(TITLE_WORK* w)
 void titleSet(TITLE_WORK* w, int counter)
 {
     IdSys.kill(0xFF, IDC_TITLE);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // No PC Nativo, os gráficos da tela de título são desenhados pelo menu nativo
+    return;
+#endif
     if (!ExtFlagChk(pSys, EXT_HARD_MODE)) {
         IdSys.set((ID_FILE_HEADER*) TITLE_ARC_PTR(w->pIdDat, 6), 0xFF, IDC_TITLE, 0x13, 6, 0);
     } else {
@@ -176,6 +203,13 @@ void titleWait(TITLE_WORK* w)
             IdTexRoomInit();
             IdSys.roomInit();
             IdTexDataLoad(TITLE_ARC_PTR(w->pIdDat, 4), TEX_OWNER_ID_TITLE);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+            IdSys.dispSw(IDC_TITLE, 0);
+            IdSys.dispSw(IDC_TITLE_MENU, 0);
+            w->Rno0 = 5;
+            w->Rno1 = 0;
+            w->counter = TTL_START_BIO4;
+#else
             {
                 register u8 z;  // COMPILER-DIFF: #13 (REG_EQUIV zero reloaded into r11)
                 z = 0;
@@ -198,6 +232,7 @@ void titleWait(TITLE_WORK* w)
                     w->Rno1 = 0;
                 }
             }
+#endif
         }
         {
             CAMERA* cam = &pG->Camera;
@@ -400,6 +435,10 @@ void titleMenuInit(TITLE_WORK* w)
     }
     w->scroll = 0;
     w->scroll_add = 1.5f;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    IdSys.dispSw(IDC_TITLE, 0);
+    IdSys.dispSw(IDC_TITLE_MENU, 0);
+#endif
 }
 
 // Cursor movement shared by the main menu and the level select.
@@ -419,21 +458,25 @@ void titleMenuInit(TITLE_WORK* w)
         {                                                                                  \
             int i;                                                                         \
             for (i = 0; i < (w)->menu_num; i++) {                                           \
-                if (i == (w)->cursor) {                                                    \
-                    (w)->p_menu[i]->be_flag |= 8;                                              \
-                } else {                                                                   \
-                    (w)->p_menu[i]->be_flag &= ~8;                                             \
+                if ((w)->p_menu[i] != NULL) {                                              \
+                    if (i == (w)->cursor) {                                                \
+                        (w)->p_menu[i]->be_flag |= 8;                                      \
+                    } else {                                                               \
+                        (w)->p_menu[i]->be_flag &= ~8;                                     \
+                    }                                                                      \
                 }                                                                          \
             }                                                                              \
         }                                                                                  \
         if ((w)->menu_num > 1 && (Key.trg & (KEY_UP | KEY_DOWN))) {                        \
             int i;                                                                         \
             for (i = 0; i < (w)->menu_num; i++) {                                           \
-                ID_UNIT* u = (w)->p_menu[i];                                                  \
-                u->timer[3] = 0;                                                           \
-                u->timer[1] = 0;                                                           \
-                u->timer[2] = 0;                                                           \
-                u->timer[0] = 0;                                                           \
+                ID_UNIT* u = (w)->p_menu[i];                                               \
+                if (u != NULL) {                                                           \
+                    u->timer[3] = 0;                                                       \
+                    u->timer[1] = 0;                                                       \
+                    u->timer[2] = 0;                                                       \
+                    u->timer[0] = 0;                                                       \
+                }                                                                          \
             }                                                                              \
         }                                                                                  \
     }
@@ -444,6 +487,20 @@ int titleMenuSelect(TITLE_WORK* w)
 {
     int ret = 0;
 
+#ifdef OPENRE4_NATIVE
+    {
+        static int tmsN = 0;
+        // Heartbeat a cada 100 chamadas + detalhe sempre que houver input.
+        tmsN++;
+        if ((tmsN % 100) == 0 || Joy[0].on != 0) {
+            unsigned f = pG ? pG->Frame_cnt : 0;
+            printf("[OpenRE4 TMS] f=%u trg=%llx on=%llx cursor=%d rno=%d/%d joyon=%x\n", f,
+                   (unsigned long long) Key.trg, (unsigned long long) Key.on, w->cursor, w->Rno0, w->Rno1,
+                   (unsigned) Joy[0].on);
+            fflush(stdout);
+        }
+    }
+#endif
     if (Key.trg & KEY_A) {
         if (ExtFlagChk(pSys, EXT_HARD_MODE)) {
             switch (w->cursor) {
@@ -558,6 +615,10 @@ void titleMain(TITLE_WORK* w)
     switch (w->Rno1) {
     case 0:
         titleMenuInit(w);
+#ifdef OPENRE4_NATIVE
+        IdSys.dispSw(IDC_TITLE, 0);
+        IdSys.dispSw(IDC_TITLE_MENU, 0);
+#endif
         w->Rno1 = 1;
         demo_loop_cnt = 600;
         if (g_autoStartVillage) {
@@ -574,6 +635,28 @@ void titleMain(TITLE_WORK* w)
         }
         break;
     case 1: {
+#ifdef OPENRE4_NATIVE
+        IdSys.dispSw(IDC_TITLE, 0);
+        IdSys.dispSw(IDC_TITLE_MENU, 0);
+        if (openre4_ui_get_selected_action() == OPENRE4_ACTION_START) {
+            printf("[OpenRE4 Core] Start confirmado via Rust UI! Iniciando Vila (r120)...\n");
+            openre4_ui_reset_action();
+            openre4_ui_set_active(0);
+            g_openre4_startVillageR120 = true;
+            pG->stage_no = 1;
+            pG->room_no = 0x20;
+            pG->room_id = 0x120;
+            G_ROOM_ID = 0x120;
+            pG->JumpPoint = 0;
+            pG->game_mode = 5;
+            w->Stage = 1;
+            w->JumpPoint = 0;
+            w->c_pos = 2;
+            w->Rno0 = 7;
+            w->Rno1 = 0;
+            return;
+        }
+#endif
         int sel = titleMenuSelect(w);
         SysFlagOff(pG, SYS_OMAKE_ADA_GAME);
         SysFlagOff(pG, SYS_OMAKE_ETC_GAME);
@@ -1384,7 +1467,7 @@ void titleExit(TITLE_WORK* w)
                 w->menu_x = 340;
                 w->menu_y = 60;
                 w->se_id = 0;
-                if (!g_autoStartVillage) {
+                if (!g_autoStartVillage && !g_openre4_startVillageR120) {
                     while (!(Joy[0].trg & 0x1100)) {
                         titleDebugMenu(w);
                         TaskSleep(1);
@@ -1394,6 +1477,9 @@ void titleExit(TITLE_WORK* w)
                 if (g_autoStartVillage) {
                     G_ROOM_ID = 0x100;
                     pG->room_id = 0x100;
+                } else if (g_openre4_startVillageR120) {
+                    G_ROOM_ID = 0x120;
+                    pG->room_id = 0x120;
                 }
                 pG->JumpPoint = w->JumpPoint;
                 pG->em_list_no = w->em_list_no;

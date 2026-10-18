@@ -54,9 +54,23 @@ void R120Init()
     TexRenderInit(&r120_work->mgr, 0x100, 1);
 }
 
-// Per-frame room main: nothing.
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+#include <imgui.h>
+#include <stdio.h>
+#include "openre4_ui.h"
+#endif
+
+// Per-frame room main:
 void R120Main()
 {
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    // Permite pular a cutscene da estrada e entrar diretamente na Vila (r100)
+    if (ImGui::IsKeyPressed(ImGuiKey_Space) || ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        printf("[OpenRE4 r120] Skip Intro solicitado via tecla! Pulando para r100...\n");
+        fflush(stdout);
+        openre4_warp_to_room(0x100);
+    }
+#endif
 }
 
 // The movie, the two events, then the jump into the village road.

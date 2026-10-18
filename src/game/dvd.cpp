@@ -422,6 +422,29 @@ void MemorySwap(void* mram, void* aram, u32 size)
     DCFlushRange(mram, size);
 }
 
+// Debug: dumps the read queue state (called by the ReadAreaData wait loop when it stalls).
+extern "C" void DvdDumpState(int id)
+{
+    int i;
+
+    printf("[DVDDBG] pCur=%p pList=%p iTask=%d\n", (void*) Dvd.pCur_queue, (void*) Dvd.pQueue_list, iTaskStatus());
+    if (Dvd.pCur_queue) {
+        cDvdQueue* q = Dvd.pCur_queue;
+        printf("[DVDDBG] cur id=%d status=%d flag=%08x rno=%d/%d name=[%s] result=%d reqfile=[%s:%d]\n",
+               q->m_Id, q->GetQueueStatus(), (unsigned) q->m_be_flag, q->m_Rno0, q->m_Rno1,
+               q->m_Name, q->m_ResultCode, q->reqfile, q->reqline);
+    }
+    for (i = 0; i < 16; i++) {
+        cDvdQueue* q = &Dvd.DvdQueue[i];
+        if (q->CkFlag(1)) {
+            printf("[DVDDBG] slot %d id=%d status=%d flag=%08x rno=%d/%d name=[%s] result=%d reqfile=[%s:%d]\n",
+                   i, q->m_Id, q->GetQueueStatus(), (unsigned) q->m_be_flag, q->m_Rno0, q->m_Rno1,
+                   q->m_Name, q->m_ResultCode, q->reqfile, q->reqline);
+        }
+    }
+    fflush(stdout);
+}
+
 // Part transfer: copies the read piece from the DVD buffer to its MRAM destination.
 #if defined(TARGET_PC) || defined(__LP64__) || defined(_WIN64)
 void cDvdQueue::trans2mram(void* buf, uintptr_t addr, u32 size)
@@ -429,6 +452,26 @@ void cDvdQueue::trans2mram(void* buf, uintptr_t addr, u32 size)
 void cDvdQueue::trans2mram(void* buf, u32 addr, u32 size)
 #endif
 {
+    {
+        extern void* g_openre4_saveImg;
+        extern unsigned g_openre4_saveImgSize;
+        if (g_openre4_saveImg != 0) {
+            uintptr_t lo = (uintptr_t) g_openre4_saveImg;
+            uintptr_t hi = lo + g_openre4_saveImgSize;
+            if (addr < hi && addr + size > lo) {
+                fprintf(stderr, "[SAVEDBG] DVD trans2mram OVERLAP DEST: addr=%p size=%x img=%p..%p\n",
+                        (void*) addr, size, (void*) lo, (void*) hi);
+            }
+            {
+                uintptr_t src = (uintptr_t) buf;
+                uintptr_t send = src + size;
+                if (src < hi && send > lo) {
+                    fprintf(stderr, "[SAVEDBG] DVD trans2mram OVERLAP SRC: buf=%p size=%x img=%p..%p\n",
+                            buf, size, (void*) lo, (void*) hi);
+                }
+            }
+        }
+    }
     memcpy((void*) addr, buf, size);
     mramSize += size;
     DCFlushRange((void*) addr, size);
@@ -1408,6 +1451,15 @@ void cDvd::Watcher()
         if (ok) {
             pCur_queue = pQueue_list;
             pQueue_list = pQueue_list->m_Next;
+        } else {
+            static int dbgN = 0;
+            if (dbgN < 8) {
+                printf("[DVDDBG] watcher start FAILED: itaskflg=%d intr=%d id=%d status=%d\n",
+                       iTaskStatus(), pQueue_list->CkFlag(0x100), pQueue_list->m_Id,
+                       pQueue_list->GetQueueStatus());
+                fflush(stdout);
+            }
+            dbgN++;
         }
     }
     if (Aram.pCur_queue == 0 && Aram.pQueue_list) {

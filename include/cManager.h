@@ -4,6 +4,7 @@
 #include "types.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 // Placement new for the managers' construct(): the work is constructed in place.
 #ifndef PLACEMENT_NEW_DEFINED
@@ -274,6 +275,14 @@ template <class T>
 int cManager<T>::dieCheck()
 {
     u32 i;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    if ((u32)(uintptr_t)pArray < 0x80000000 || (u32)(uintptr_t)pArray >= 0x84000000 || nArray > 0x10000 || size > 0x10000) {
+        fprintf(stderr, "[CMDBG] dieCheck bad manager: pArray=%p nArray=%u size=%u\n",
+                (void*) pArray, (unsigned) nArray, (unsigned) size);
+        fflush(stderr);
+        return 0;
+    }
+#endif
     for (i = 0; i < nArray; i++) {
         T* p = (T*)((u8*)pArray + size * i);
         if (!p->isEmpty()) {

@@ -105,6 +105,19 @@ void CameraMotion::move()
     param.Roll = roll.y;
     param.Fovy = fov.y * 180.0f / PI;
     CameraSetOrientationRoll(this);
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    {
+        static int pdbg = 0;
+        if ((pdbg++ % 60) == 0) {
+            printf("[CUTRAW] pos=(%.1f,%.1f,%.1f) at=(%.1f,%.1f,%.1f) base=%d", pos.x, pos.y, pos.z, at.x, at.y, at.z, m_p_base_mat != 0);
+            if (m_p_base_mat) {
+                printf(" baseT=(%.1f,%.1f,%.1f)", (*m_p_base_mat)[0][3], (*m_p_base_mat)[1][3], (*m_p_base_mat)[2][3]);
+            }
+            printf("\n");
+            fflush(stdout);
+        }
+    }
+#endif
     if (m_p_base_mat) {
         PSMTXMultVec(*m_p_base_mat, &param.Campos, &param.Campos);
         PSMTXMultVec(*m_p_base_mat, &param.Target, &param.Target);
@@ -112,6 +125,17 @@ void CameraMotion::move()
         CameraSetOrientationUp(this);
     }
     m_state = 0;
+#if defined(OPENRE4_NATIVE) || defined(TARGET_PC)
+    {
+        static int cdbg = 0;
+        if ((cdbg++ % 20) == 0) {
+            printf("[CUTDBG] frame=%.1f max=%.1f joints=%d pos=(%.1f,%.1f,%.1f) at=(%.1f,%.1f,%.1f) fov=%.2f\n",
+                   w->Mot_frame, w->Mot_frame_max, w->Joint_num,
+                   pos.x, pos.y, pos.z, at.x, at.y, at.z, param.Fovy);
+            fflush(stdout);
+        }
+    }
+#endif
     if (CameraSequenceCtrl(&m_info) == 4) {
         m_state = 1;
     }

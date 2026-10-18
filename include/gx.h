@@ -262,6 +262,9 @@ void GXClearVtxDesc(void);
 void GXSetVtxDesc(int attr, int type);
 void GXSetVtxAttrFmt(int vtxfmt, int attr, int cnt, int type, u8 frac);
 void GXSetArray(int attr, void* base_ptr, u8 stride);
+/* Aurora needs the real array length for indexed vertex arrays; the classic API has no size,
+   so ports call this variant with the byte count backing the indices. */
+void GXSetArraySized(int attr, const void* base_ptr, u32 size, u8 stride);
 void GXCallDisplayList(const void* list, u32 nbytes);
 void GXLoadPosMtxImm(const f32 mtx[3][4], u32 id);
 void GXLoadNrmMtxImm(const f32 mtx[3][4], u32 id);

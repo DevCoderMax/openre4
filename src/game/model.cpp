@@ -100,12 +100,12 @@ int cModel::modelInit(void* bin, void* tpl)
 {
     cModelInfo* info;
 
-    if (bin == NULL) {
-        pLog->err(0, 0, "modelInit() : bin_addr == NULL.");
+    if (bin == NULL || ((uintptr_t)bin & 3)) {
+        pLog->err(0, 0, "modelInit() : bin_addr invalid: %p", bin);
         return 0;
     }
-    if (tpl == NULL) {
-        pLog->err(0, 0, "modelInit() : tex_addr == NULL.");
+    if (tpl == NULL || ((uintptr_t)tpl & 3)) {
+        pLog->err(0, 0, "modelInit() : tex_addr invalid: %p", tpl);
         return 0;
     }
     calcModelAddr((cModelData*) bin);
